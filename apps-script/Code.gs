@@ -159,8 +159,9 @@ function utilisateur_(email) {
   if (email.split('@')[1] !== DOMAINE) throw erreurAuth_("Cette app est réservée aux comptes de l'école (…@" + DOMAINE + ').');
   if (lignes_('profs').some(r => String(r[0]).trim().toLowerCase() === email)) return { email, role: 'prof' };
   if (lignes_('bloques').some(r => String(r[0]).trim().toLowerCase() === email)) throw erreurAuth_('Votre accès à cette app a été bloqué. Parlez-en à votre professeur.');
-  if (/\.student@/.test(email)) return { email, role: 'eleve' };
-  throw erreurAuth_("Votre adresse n'est pas dans la liste des professeurs. Demandez à M. Lesenfants de vous ajouter.");
+  // Toute autre adresse de l'école est un élève (avec ou sans « .student »).
+  // Un collègue absent de l'onglet Profs arrive donc en vue élève : il suffit de l'y ajouter.
+  return { email, role: 'eleve' };
 }
 function prof_(u) { if (u.role !== 'prof') throw new Error('Réservé aux professeurs.'); }
 

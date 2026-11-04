@@ -23,7 +23,7 @@ const ONGLETS = {
   profs: { nom: 'Profs', entetes: ['Adresse', 'Nom', 'Remarque'] },
   bloques: { nom: 'Bloqués', entetes: ['Adresse', 'Raison', 'Date'] },
   eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion'] },
-  dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)'] },
+  dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique'] },
   catalogue: { nom: 'Catalogue', entetes: ['id', 'Catégorie', 'Description', 'Référence', 'Marque', 'Unité', 'Prix HTVA', 'Couleur', 'Visible', 'À vérifier'] },
 };
 
@@ -36,10 +36,9 @@ function installer() {
     const o = ONGLETS[k];
     let sh = ss.getSheetByName(o.nom);
     if (!sh) sh = ss.insertSheet(o.nom);
-    if (sh.getLastRow() === 0) {
-      sh.getRange(1, 1, 1, o.entetes.length).setValues([o.entetes]).setFontWeight('bold').setBackground('#e9edf1');
-      sh.setFrozenRows(1);
-    }
+    // (ré)écrit la ligne d'en-têtes : sans risque pour les données, utile après une mise à jour
+    sh.getRange(1, 1, 1, o.entetes.length).setValues([o.entetes]).setFontWeight('bold').setBackground('#e9edf1');
+    sh.setFrozenRows(1);
   }
   const profs = ss.getSheetByName(ONGLETS.profs.nom);
   const moi = Session.getEffectiveUser().getEmail().toLowerCase();
@@ -114,6 +113,8 @@ const ACTIONS = {
   profPhoto: (u, q) => (prof_(u), profPhoto_(String(q.id))),
   profValiderPlanche: (u, q) => (prof_(u), profValiderPlanche_(u, String(q.email).toLowerCase(), q.lignes || [])),
   profRendre: (u, q) => (prof_(u), profRendre_(String(q.email).toLowerCase(), String(q.ex))),
+  profCorriger: (u, q) => (prof_(u), profCorriger_(String(q.email).toLowerCase(), String(q.ex), q.correction, !!q.publier)),
+  reprendre: (u, q) => reprendre_(u, String(q.ex)),
   catMaj: (u, q) => (prof_(u), catMaj_(q.item || {})),
   catSuppr: (u, q) => (prof_(u), catSuppr_(String(q.id))),
 };
@@ -171,6 +172,7 @@ function prof_(u) { if (u.role !== 'prof') throw new Error('Réservé aux profes
 function moi_(u) {
   const res = { email: u.email, role: u.role, catalogue: lireCatalogue_(u.role) };
   if (u.role === 'prof') { const n = nomDepuisEmail_(u.email); res.profil = { prenom: n.prenom, nom: n.nom, classe: '', confirme: true }; return res; }
+  // (les élèves reçoivent aussi l'état de correction de chaque TP)
   return verrou_(() => {
     const sh = onglet_('eleves'), rows = lignes_('eleves'), now = new Date();
     let i = rows.findIndex(r => String(r[0]).toLowerCase() === u.email);
@@ -182,7 +184,7 @@ function moi_(u) {
     res.profil = { prenom: r[1], nom: r[2], classe: r[3], confirme: r[4] === true };
     res.planche = { validee: r[5] === true, lignes: json_(r[6], []) };
     res.resume = {};
-    lignes_('dossiers').forEach(d => { if (String(d[0]).toLowerCase() === u.email) res.resume[d[1]] = { maj: d[3] ? new Date(d[3]).getTime() : 0, remis: d[4] === true }; });
+    lignes_('dossiers').forEach(d => { if (String(d[0]).toLowerCase() === u.email) res.resume[d[1]] = { maj: d[3] ? new Date(d[3]).getTime() : 0, remis: d[4] === true, corrige: d[9] === true, remises: Number(d[10]) || 0 }; });
     return res;
   });
 }
@@ -202,23 +204,31 @@ function ligneDossier_(email, ex) {
 function lireDossier_(u, ex) {
   const { rows, i } = ligneDossier_(u.email, ex);
   if (i < 0) return null;
-  const d = json_(rows[i][2], {}) || {};
-  d.remis = rows[i][4] === true; d.photoId = rows[i][6] || '';
+  const r = rows[i], d = json_(r[2], {}) || {};
+  d.remis = r[4] === true; d.photoId = r[6] || ''; d.remises = Number(r[10]) || 0;
+  d.correction = r[9] === true ? json_(r[8], null) : null;
+  d.historique = json_(r[11], []);
   return d;
 }
+const CHAMPS_SERVEUR = ['remis', 'photoId', 'remises', 'correction', 'historique'];
+function nettoyer_(json) { const d = json_(json, {}) || {}; CHAMPS_SERVEUR.forEach(k => delete d[k]); return JSON.stringify(d); }
 function sauverDossier_(u, ex, json) {
   if (u.role !== 'eleve') return true;
+  json = nettoyer_(json);
   if (json.length > 49000) throw new Error('Dossier trop volumineux pour être enregistré.');
   return verrou_(() => {
     const sh = onglet_('dossiers'), { rows, i } = ligneDossier_(u.email, ex);
     if (i >= 0 && rows[i][4] === true) throw new Error('Ce dossier a déjà été remis : il ne peut plus être modifié.');
-    if (i < 0) sh.appendRow([u.email, ex, json, new Date(), false, '', '', '']);
+    if (i < 0) sh.appendRow([u.email, ex, json, new Date(), false, '', '', '', '', false, 0, '']);
     else sh.getRange(i + 2, 3, 1, 2).setValues([[json, new Date()]]);
     return true;
   });
 }
 function remettre_(u, ex, json, photo) {
   if (u.role !== 'eleve') throw new Error('Seuls les élèves remettent un dossier.');
+  json = nettoyer_(json);
+  const avant = ligneDossier_(u.email, ex);
+  if (avant.i >= 0 && (Number(avant.rows[avant.i][10]) || 0) >= 2) throw new Error('Vous avez déjà remis ce dossier deux fois.');
   let photoId = '', lien = '';
   if (photo) {
     const m = String(photo).match(/^data:(image\/\w+);base64,(.+)$/);
@@ -230,12 +240,29 @@ function remettre_(u, ex, json, photo) {
   }
   return verrou_(() => {
     const sh = onglet_('dossiers'), { rows, i } = ligneDossier_(u.email, ex), now = new Date();
-    if (i < 0) sh.appendRow([u.email, ex, json, now, true, now, photoId, lien]);
-    else {
-      if (rows[i][4] === true) throw new Error('Ce dossier a déjà été remis.');
-      sh.getRange(i + 2, 3, 1, 6).setValues([[json, now, true, now, photoId || rows[i][6], lien || rows[i][7]]]);
-    }
-    return { remis: true, photoId };
+    if (i < 0) { sh.appendRow([u.email, ex, json, now, true, now, photoId, lien, '', false, 1, '']); return { remis: true, photoId, remises: 1 }; }
+    if (rows[i][4] === true) throw new Error('Ce dossier a déjà été remis.');
+    const n = (Number(rows[i][10]) || 0) + 1;
+    sh.getRange(i + 2, 3, 1, 6).setValues([[json, now, true, now, photoId || rows[i][6], lien || rows[i][7]]]);
+    sh.getRange(i + 2, 11).setValue(n);
+    return { remis: true, photoId, remises: n };
+  });
+}
+
+function reprendre_(u, ex) {
+  // seconde remise : l'élève rouvre son dossier après avoir lu la correction
+  return verrou_(() => {
+    const { rows, i } = ligneDossier_(u.email, ex);
+    if (i < 0) throw new Error('Dossier introuvable.');
+    const r = rows[i];
+    if (r[4] !== true || r[9] !== true) throw new Error('Le dossier doit être remis et corrigé avant de pouvoir le reprendre.');
+    if ((Number(r[10]) || 0) >= 2) throw new Error('La seconde remise a déjà été utilisée.');
+    const hist = json_(r[11], []);
+    hist.push({ correction: json_(r[8], null), le: new Date().getTime() });
+    onglet_('dossiers').getRange(i + 2, 5, 1, 1).setValue(false);
+    onglet_('dossiers').getRange(i + 2, 9, 1, 2).setValues([['', false]]);
+    onglet_('dossiers').getRange(i + 2, 12).setValue(JSON.stringify(hist));
+    return true;
   });
 }
 
@@ -246,7 +273,7 @@ function profEleves_() {
   const dossiers = lignes_('dossiers');
   return lignes_('eleves').map(r => {
     const email = String(r[0]).toLowerCase(), ex = {};
-    dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6] }; });
+    dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 }; });
     return { email, prenom: r[1], nom: r[2], classe: r[3], planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
   }).sort((a, b) => (String(a.classe) + ' ' + a.nom + ' ' + a.prenom).localeCompare(String(b.classe) + ' ' + b.nom + ' ' + b.prenom));
 }
@@ -257,6 +284,10 @@ function profDossier_(email, ex) {
     data: i >= 0 ? json_(rows[i][2], null) : null,
     remis: i >= 0 && rows[i][4] === true,
     photoId: i >= 0 ? rows[i][6] : '',
+    correction: i >= 0 ? json_(rows[i][8], null) : null,
+    publiee: i >= 0 && rows[i][9] === true,
+    remises: i >= 0 ? Number(rows[i][10]) || 0 : 0,
+    historique: i >= 0 ? json_(rows[i][11], []) : [],
     profil: el ? { prenom: el[1], nom: el[2], classe: el[3] } : null,
     planche: el ? { validee: el[5] === true, lignes: json_(el[6], []) } : { validee: false, lignes: [] },
   };
@@ -270,6 +301,17 @@ function profValiderPlanche_(u, email, lignes) {
     const rows = lignes_('eleves'), i = rows.findIndex(r => String(r[0]).toLowerCase() === email);
     if (i < 0) throw new Error('Élève introuvable.');
     onglet_('eleves').getRange(i + 2, 6, 1, 4).setValues([[true, JSON.stringify(lignes), u.email, new Date()]]);
+    return true;
+  });
+}
+function profCorriger_(email, ex, correction, publier) {
+  return verrou_(() => {
+    const { rows, i } = ligneDossier_(email, ex);
+    if (i < 0) throw new Error('Dossier introuvable.');
+    if (publier && rows[i][4] !== true) throw new Error("Le dossier n'est pas remis : la correction ne peut pas encore être publiée.");
+    const json = JSON.stringify(correction || {});
+    if (json.length > 49000) throw new Error('Correction trop volumineuse.');
+    onglet_('dossiers').getRange(i + 2, 9, 1, 2).setValues([[json, !!publier]]);
     return true;
   });
 }

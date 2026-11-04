@@ -280,6 +280,7 @@ function deconnecter(msg) {
 /* ---------- accueil élève ---------- */
 function etatEx(ex) {
   const d = DATA.ex[ex.id], r = (DATA.resume || {})[ex.id];
+  if ((d && d.correction) || (r && r.corrige && (!d || d.remis !== false))) return { lbl: 'Corrigé', cls: 'ok' };
   if ((d && d.remis) || (!d && r && r.remis)) return { lbl: 'Remis', cls: 'ok' };
   if (!d && r) return { lbl: 'En cours', cls: 'cur' };
   const touche = d && (d.bdc.lignes.length || (d.cablage.wires || []).length || (d.cablage.placed && Object.keys(d.cablage.placed).length) || (d.principe.syms || []).length || (d.unifilaire.points || []).length || Object.values(d.etapes || {}).some(Boolean) || Object.values(d.outils || {}).some(Boolean));
@@ -304,14 +305,15 @@ function homeEleve(main) {
 }
 
 /* ---------- exercice ---------- */
-const TABS_CABLAGE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['principe', 'Principe'], ['unifilaire', 'Unifilaire'], ['cablage', 'Câblage'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['remise', 'Remise']];
-const TABS_PLANCHE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['position', 'Schéma de position'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['remise', 'Remise']];
+const TABS_CABLAGE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['principe', 'Principe'], ['unifilaire', 'Unifilaire'], ['cablage', 'Câblage'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['remise', 'Remise'], ['correction', 'Correction']];
+const TABS_PLANCHE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['position', 'Schéma de position'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['remise', 'Remise'], ['correction', 'Correction']];
 let PV = null; const SCRATCH = {}, FETCHED = {};
 let CTX = { planche: { validee: false, lignes: [] }, eleve: null, lecture: false };
 function exView(main) {
   const ex = EXERCICES.find(e => e.id === VIEW.id);
-  const tabs = ex.kind === 'planche' ? TABS_PLANCHE : TABS_CABLAGE;
-  const tab = VIEW.tab || 'enonce';
+  const tabsTous = ex.kind === 'planche' ? TABS_PLANCHE : TABS_CABLAGE;
+  let tabs = tabsTous;
+  const tab0 = VIEW.tab || 'enonce';
   const email = USER.role === 'prof' ? (VIEW.eleve || 'jean.dupont.student@elmarche.be') : USER.email;
   const v = variante(ex, email);
   let d, p;
@@ -346,6 +348,8 @@ function exView(main) {
       }).catch(e => { if (e.auth) deconnecter(e.message); });
     }
   }
+  if (USER.role === 'eleve' && !(d.correction || (!ONLINE && d.remis))) tabs = tabsTous.filter(t => t[0] !== 'correction');
+  const tab = tabs.some(t => t[0] === tab0) ? tab0 : 'enonce';
   const tabLbl = tabs.find(t => t[0] === tab)[1];
   main.innerHTML = `
     <div class="crumbs"><button type="button" class="as-link" data-nav2="home">← ${USER.role === 'prof' ? (CTX.eleve ? 'Mes élèves' : 'Exercices') : 'Mes TP'}</button>
@@ -361,7 +365,7 @@ function exView(main) {
     </section>
     ${USER.role === 'prof' && CTX.eleve ? `<p class="notice prof">Dossier de <b>${esc(p.prenom)} ${esc(p.nom)}</b> (${esc(email)}) · ${PV.remis ? 'remis' : PV.data && PV.data.maj ? 'en cours' : 'pas encore commencé'}. Consultation : vos modifications ne sont pas enregistrées.</p>` : ''}
     ${USER.role === 'prof' && !CTX.eleve ? `<p class="notice prof">Aperçu professeur : version de l'exercice pour <b>${esc(email)}</b>.${ONLINE ? ' Rien n\'est enregistré.' : ` <label class="inline">Autre élève <input id="pv-email" type="email" value="${esc(email)}"></label>`}</p>` : ''}
-    ${USER.role === 'eleve' && d.remis ? '<p class="notice">Ce dossier est remis : il ne peut plus être modifié. Si vous devez le corriger, demandez au professeur de vous le rendre.</p>' : ''}
+    ${USER.role === 'eleve' && d.remis ? (d.correction && (d.remises || 1) < 2 ? '<p class="notice">Ce dossier est corrigé. Lisez la correction : vous pouvez ensuite le corriger et le remettre une seconde fois.</p>' : d.correction ? '<p class="notice">Ce dossier est corrigé.</p>' : '<p class="notice">Ce dossier est remis : il ne peut plus être modifié en attendant la correction du professeur.</p>') : ''}
     <nav class="tabs" aria-label="Feuilles du dossier">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${k === tab ? 'on' : ''}" aria-current="${k === tab ? 'page' : 'false'}">${l}</button>`).join('')}</nav>
     <section id="sheet" class="sheet"></section>`;
   main.querySelector('[data-nav2]').addEventListener('click', () => go({ page: 'home' }));
@@ -381,6 +385,7 @@ function exView(main) {
     bdc: () => bdcSheet(sheet, ex, v, d),
     outils: () => outilsSheet(sheet, ex, d),
     remise: () => remiseSheet(sheet, ex, d),
+    correction: () => correctionSheet(sheet, ex, v, d),
   })[tab]();
 }
 function sheetHead(titre, txt, fiche) {
@@ -699,8 +704,9 @@ function remiseSheet(sheet, ex, d) {
       ${!ONLINE ? '<p class="muted small">Dans cette démo, la photo reste sur cet appareil.</p>' : ''}
     </div>
     ${prof
-      ? `<div class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span><button type="button" class="btn ghost" id="rendre">Rendre le dossier à l\'élève</button>' : '<span class="state">Pas encore remis</span>'}<span id="rem-msg" class="muted" role="status"></span></div>`
-      : `<div class="row wrapr"><button type="button" class="btn primary" id="remettre" ${remis ? 'disabled' : ''}>${remis ? 'Dossier remis' : 'Remettre le dossier'}</button><span id="rem-msg" class="muted" role="status"></span></div>`}`;
+      ? `<div class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span><button type="button" class="btn primary" data-goto="correction">Corriger</button><button type="button" class="btn ghost" id="rendre">Rendre le dossier à l\'élève</button>' : '<span class="state">Pas encore remis</span>'}<span id="rem-msg" class="muted" role="status"></span></div>`
+      : `<div class="row wrapr"><button type="button" class="btn primary" id="remettre" ${remis ? 'disabled' : ''}>${remis ? 'Dossier remis' : (d.remises || 0) >= 1 ? 'Remettre le dossier (seconde remise)' : 'Remettre le dossier'}</button>${d.correction ? '<button type="button" class="btn" data-goto="correction">Voir la correction</button>' : remis && ONLINE ? '<span class="muted">En attente de la correction du professeur.</span>' : ''}<span id="rem-msg" class="muted" role="status"></span></div>`}`;
+  sheet.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.goto }))));
   if (prof && PV.photoId) {
     $('#photo-prev').innerHTML = '<p class="muted">Chargement de la photo…</p>';
     api('profPhoto', { id: PV.photoId }).then(url => { $('#photo-prev').innerHTML = `<img src="${url}" alt="Photo du montage de l'élève">`; })
@@ -725,13 +731,13 @@ function remiseSheet(sheet, ex, d) {
   });
   const rem = $('#remettre');
   if (rem) rem.addEventListener('click', async () => {
-    if (!ONLINE) { d.remis = true; save(); rem.disabled = true; rem.textContent = 'Dossier remis'; $('#rem-msg').textContent = 'Démo : enregistré sur cet appareil.'; return; }
+    if (!ONLINE) { d.remis = true; d.remises = (d.remises || 0) + 1; save(); go(Object.assign({}, VIEW, { tab: 'correction' })); return; }
     if (!enLigne()) { $('#rem-msg').textContent = 'Il faut une connexion internet pour remettre le dossier.'; return; }
     rem.disabled = true; $('#rem-msg').textContent = 'Envoi du dossier…';
     try {
       d.maj = Date.now();
       const r = await api('remettre', { ex: ex.id, data: JSON.stringify(d), photo: PHOTOS[ex.id] || '' });
-      d.remis = true; if (r.photoId) d.photoId = r.photoId;
+      d.remis = true; d.remises = r.remises || ((d.remises || 0) + 1); if (r.photoId) d.photoId = r.photoId;
       delete (DATA.dirty || {})[ex.id]; delete PHOTOS[ex.id];
       (DATA.resume ||= {})[ex.id] = { maj: Date.now(), remis: true };
       persist(); go(VIEW);
@@ -739,6 +745,99 @@ function remiseSheet(sheet, ex, d) {
   });
 }
 const PHOTOS = {};
+
+/* ---------- correction (V2) ---------- */
+const ORDRE_G = { erreur: 0, remarque: 1, ok: 2 };
+function htmlParties(parties, ouvert) {
+  return parties.map(p => {
+    const err = p.F.filter(f => f.g === 'erreur').length, rem = p.F.filter(f => f.g === 'remarque').length;
+    return `<details class="corr-part" ${ouvert || err || rem ? 'open' : ''}><summary><span class="corr-titre">${esc(p.titre)}</span>
+      <span class="corr-badges">${err ? `<span class="pill-err">${err} erreur${err > 1 ? 's' : ''}</span>` : ''}${rem ? `<span class="pill-rem">${rem} remarque${rem > 1 ? 's' : ''}</span>` : ''}${!err && !rem ? '<span class="pill-ok">tout juste</span>' : ''}</span>
+      <span class="corr-score mono">${num(p.score)} / ${p.max}</span></summary>
+      <ul class="constats">${p.F.slice().sort((a, b) => ORDRE_G[a.g] - ORDRE_G[b.g]).map(f => `<li class="c-${f.g}"><span class="c-ico" aria-hidden="true">${f.g === 'ok' ? '✓' : f.g === 'erreur' ? '✕' : '!'}</span>
+        <span class="c-txt">${esc(f.msg)}${f.code ? ` <span class="c-code" title="Code d'infraction Vinçotte (RGIE)">Vinçotte ${f.code}</span>` : ''}</span>${f.fiche && f.g !== 'ok' ? `<button type="button" class="as-link small" data-fiche="${f.fiche}">Comment faire ?</button>` : ''}</li>`).join('')}</ul></details>`;
+  }).join('');
+}
+function totalGrille(g) {
+  const vide = k => g[k] == null || g[k] === '';
+  return { tot: GRILLE.reduce((s, [k]) => s + (vide(k) ? 0 : +g[k]), 0), max: GRILLE.reduce((s, [k, , m]) => s + (vide(k) ? 0 : m), 0) };
+}
+function htmlGrille(g, editable) {
+  const { tot, max } = totalGrille(g);
+  return `<table class="tbl grille"><thead><tr><th>Critère</th><th class="num">Points</th><th class="num">Sur</th></tr></thead><tbody>
+    ${GRILLE.map(([k, nom, m]) => `<tr><td>${nom}${k === 'produit' ? ' <span class="muted small">(montage, par le professeur)</span>' : ''}</td>
+      <td class="num">${editable ? `<input type="text" inputmode="decimal" class="mono g-in" data-g="${k}" value="${g[k] == null ? '' : String(g[k]).replace('.', ',')}" aria-label="${nom}">` : `<span class="mono">${g[k] == null || g[k] === '' ? '—' : num(+g[k])}</span>`}</td><td class="num mono">${m}</td></tr>`).join('')}
+    <tr class="g-tot"><td>Total</td><td class="num mono" id="g-tot">${num(tot)}</td><td class="num mono" id="g-max">${max || 215}${max ? ` <span class="muted">· ${Math.round(tot / max * 100)} %</span>` : ''}</td></tr></tbody></table>`;
+}
+function correctionSheet(sheet, ex, v, d) {
+  const prof = USER.role === 'prof';
+  const auto = corrigerDossier(ex, v, d);
+  if (prof && CTX.eleve) {
+    const saved = PV.correction;
+    const g = Object.assign({}, auto.grille, saved && saved.grille);
+    const h0 = (PV.historique || [])[0];
+    sheet.innerHTML = `${sheetHead('Correction', 'La correction automatique est calculée à partir du dossier de l\'élève. Ajustez les points si besoin, ajoutez un commentaire, puis publiez : l\'élève verra le détail de ses erreurs avec les explications.')}
+      <p class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span>' : '<span class="state cur">Pas encore remis</span>'}
+        <span class="state">${PV.remises >= 2 ? 'Seconde remise' : PV.remises === 1 ? 'Première remise' : 'Aucune remise'}</span>
+        ${saved ? (PV.publiee ? '<span class="state ok">Correction publiée</span>' : '<span class="state todo">Brouillon enregistré</span>') : ''}</p>
+      ${h0 && h0.correction ? `<details class="corr-hist"><summary>Correction de la première remise : ${num(totalGrille(h0.correction.grille || {}).tot)} points</summary>${htmlParties(h0.correction.parties || [])}</details>` : ''}
+      <div class="corr-grid">
+        <div class="corr-side">
+          <h3>Grille d'évaluation</h3>
+          ${htmlGrille(g, true)}
+          <label class="corr-com" for="g-com">Commentaire pour l'élève</label>
+          <textarea id="g-com" rows="4" placeholder="Points forts, points à revoir, conseil pour la prochaine fois…">${esc(saved && saved.commentaire || '')}</textarea>
+          <div class="row wrapr"><button type="button" class="btn" id="g-save">Enregistrer le brouillon</button>
+            <button type="button" class="btn primary" id="g-pub" ${PV.remis ? '' : 'disabled title="Le dossier doit être remis"'}>${PV.publiee ? 'Republier' : 'Publier à l\'élève'}</button></div>
+          <p id="g-msg" class="muted small" role="status"></p>
+        </div>
+        <div class="corr-main"><h3>Correction automatique</h3>${htmlParties(auto.parties)}</div>
+      </div>`;
+    const lire = () => { const o = {}; sheet.querySelectorAll('[data-g]').forEach(i => { const t = i.value.trim().replace(',', '.'); o[i.dataset.g] = t === '' ? null : Math.max(0, +t || 0); }); return o; };
+    const majTot = () => { const { tot, max } = totalGrille(lire()); $('#g-tot').textContent = num(tot); $('#g-max').innerHTML = `${max || 215}${max ? ` <span class="muted">· ${Math.round(tot / max * 100)} %</span>` : ''}`; };
+    sheet.querySelectorAll('[data-g]').forEach(i => i.addEventListener('input', majTot));
+    const envoyer = publier => {
+      const corr = { date: Date.now(), essai: PV.remises || 1, grille: lire(), commentaire: $('#g-com').value.trim(), parties: auto.parties.map(p => ({ id: p.id, titre: p.titre, max: p.max, score: p.score, F: p.F })) };
+      $('#g-msg').textContent = publier ? 'Publication…' : 'Enregistrement…';
+      api('profCorriger', { email: CTX.eleve, ex: ex.id, correction: corr, publier })
+        .then(() => { PV.correction = corr; if (publier) PV.publiee = true; ELEVES = null; go(VIEW); })
+        .catch(e => { $('#g-msg').textContent = e.message; });
+    };
+    $('#g-save').addEventListener('click', () => envoyer(false));
+    $('#g-pub').addEventListener('click', () => envoyer(true));
+    bindFiches(sheet);
+    return;
+  }
+  if (prof) {
+    sheet.innerHTML = `${sheetHead('Correction', ONLINE ? 'Aperçu de la correction automatique pour les données de cet aperçu. Pour corriger un élève, ouvrez son dossier depuis « Mes élèves ».' : 'Aperçu de la correction automatique du dossier rempli dans cette démo.')}
+      <div class="corr-grid"><div class="corr-side"><h3>Grille proposée</h3>${htmlGrille(auto.grille, false)}</div><div class="corr-main">${htmlParties(auto.parties)}</div></div>`;
+    bindFiches(sheet);
+    return;
+  }
+  // élève
+  const corr = d.correction || (!ONLINE && d.remis ? Object.assign(auto, { commentaire: '', demo: true }) : null);
+  if (!corr) { sheet.innerHTML = sheetHead('Correction', 'La correction apparaîtra ici quand le professeur l\'aura publiée.'); return; }
+  const peutReprendre = d.remis && (d.remises || 1) < 2;
+  sheet.innerHTML = `${sheetHead('Correction', corr.demo ? 'Démo : en vrai, la correction apparaît quand le professeur l\'a validée.' : 'Lisez chaque remarque : elle explique ce qui ne va pas et renvoie vers la fiche qui aide à corriger.')}
+    <div class="corr-grid">
+      <div class="corr-side"><h3>Votre évaluation</h3>${htmlGrille(corr.grille || {}, false)}
+        ${corr.commentaire ? `<div class="corr-comment"><span class="k">Commentaire du professeur</span><p>${esc(corr.commentaire)}</p></div>` : ''}
+        ${peutReprendre ? `<div class="corr-again"><p>Vous pouvez corriger votre dossier et le remettre <b>une seconde fois</b>. Les deux résultats sont gardés.</p>
+          <button type="button" class="btn primary" id="reprendre">Corriger et remettre</button><p id="rep-msg" class="muted small" role="status"></p></div>` : ((d.remises || 0) >= 2 ? '<p class="muted small">Seconde remise utilisée.</p>' : '')}
+      </div>
+      <div class="corr-main"><h3>Le détail</h3>${htmlParties(corr.parties || [])}</div>
+    </div>`;
+  bindFiches(sheet);
+  const rp = $('#reprendre');
+  if (rp) rp.addEventListener('click', async () => {
+    const rouvrir = () => { (d.historique ||= []).push({ correction: d.correction || corr, le: Date.now() }); d.correction = null; d.remis = false; d.remises = Math.max(1, d.remises || 0); };
+    if (!ONLINE) { rouvrir(); save(); go(Object.assign({}, VIEW, { tab: 'enonce' })); return; }
+    if (!enLigne()) { $('#rep-msg').textContent = 'Il faut une connexion internet.'; return; }
+    rp.disabled = true;
+    try { await api('reprendre', { ex: ex.id }); rouvrir(); if (DATA.resume && DATA.resume[ex.id]) DATA.resume[ex.id].corrige = false; persist(); go(Object.assign({}, VIEW, { tab: 'enonce' })); }
+    catch (e) { rp.disabled = false; $('#rep-msg').textContent = e.message; }
+  });
+}
 
 /* ---------- apprendre ---------- */
 function ficheIllus(f) {
@@ -798,9 +897,9 @@ function profHome(main) {
     box.innerHTML = `<table class="tbl eleves"><thead><tr><th>Élève</th><th>Classe</th><th class="c">Planche</th>${EXERCICES.map(x => `<th class="c">TP ${x.num}</th>`).join('')}</tr></thead>
       <tbody>${list.map(e => `<tr><td><b>${esc(e.nom)}</b> ${esc(e.prenom)}<span class="muted small mail">${esc(e.email)}</span></td><td>${esc(e.classe)}</td>
         <td class="c">${e.planche ? '<span class="state ok">validée</span>' : '<span class="muted">—</span>'}</td>
-        ${EXERCICES.map(x => { const st = e.ex[x.id]; const lbl = st ? (st.remis ? 'remis' : 'en cours') : '—'; const cls = st ? (st.remis ? 'ok' : 'cur') : '';
+        ${EXERCICES.map(x => { const st = e.ex[x.id]; const lbl = st ? (st.corrige && st.remis ? 'corrigé' : st.remis ? 'à corriger' : 'en cours') : '—'; const cls = st ? (st.corrige && st.remis ? 'ok' : st.remis ? 'todo' : 'cur') : '';
           return `<td class="c"><button type="button" class="cell-btn state ${cls}" data-el="${esc(e.email)}" data-x="${x.id}" data-remis="${st && st.remis ? 1 : 0}" title="TP ${x.num} – ${esc(e.prenom)} ${esc(e.nom)}">${lbl}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
-    box.querySelectorAll('[data-el]').forEach(b => b.addEventListener('click', () => { PV = null; go({ page: 'ex', id: b.dataset.x, tab: b.dataset.remis === '1' ? 'remise' : 'enonce', eleve: b.dataset.el }); }));
+    box.querySelectorAll('[data-el]').forEach(b => b.addEventListener('click', () => { PV = null; go({ page: 'ex', id: b.dataset.x, tab: b.dataset.remis === '1' ? 'correction' : 'enonce', eleve: b.dataset.el }); }));
   };
   const charger = () => api('profEleves').then(r => { ELEVES = r; draw(); }).catch(e => { const box = $('#eleves'); if (box) box.innerHTML = `<p class="err">${esc(e.message)}</p>`; if (e.auth) deconnecter(e.message); });
   $('#el-q').addEventListener('input', e => { FILTRE_ELEVES = e.target.value; draw(); });

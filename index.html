@@ -236,6 +236,34 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 .cell-btn { border: 1px solid transparent; font: inherit; font-size: .76rem; font-weight: 600; cursor: pointer; }
 .cell-btn:hover { border-color: var(--accent); }
 
+/* correction (V2) */
+.state.todo { background: var(--warn-soft); color: var(--warn); }
+.corr-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.corr-side, .corr-main { display: grid; gap: 10px; min-width: 0; }
+@media (max-width: 860px) { .corr-grid { grid-template-columns: 1fr; } }
+.grille { background: var(--surface); border: 2px solid var(--ink); border-radius: 4px; }
+.grille .g-in { width: 64px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; text-align: right; background: var(--surface); color: var(--ink); }
+.grille .g-tot td { font-weight: 700; background: var(--surface-2); border-top: 2px solid var(--ink); }
+.corr-com { font-weight: 600; }
+#g-com { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; }
+.corr-part, .corr-hist { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.corr-part summary, .corr-hist summary { display: flex; gap: 10px; align-items: center; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
+.corr-hist summary { font-weight: 600; color: var(--muted); }
+.corr-titre { font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+.corr-badges { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.corr-score { margin-left: auto; font-weight: 600; }
+.pill-err, .pill-rem, .pill-ok { font-size: .74rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.pill-err { background: var(--accent-soft); color: var(--accent); } .pill-rem { background: var(--warn-soft); color: var(--warn); } .pill-ok { background: var(--ok-soft); color: var(--ok); }
+.constats { list-style: none; margin: 0; padding: 0 14px 12px; display: grid; gap: 6px; }
+.constats li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); }
+.c-ico { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; }
+.c-erreur .c-ico { background: var(--accent); color: var(--accent-ink); } .c-remarque .c-ico { background: var(--warn); color: #fff; } .c-ok .c-ico { background: var(--ok-soft); color: var(--ok); }
+.c-ok .c-txt { color: var(--muted); }
+.c-code { font: 600 .7rem var(--font-mono); padding: 1px 6px; border-radius: 4px; background: var(--prof-soft); color: var(--prof); white-space: nowrap; }
+.corr-comment { background: var(--prof-soft); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.corr-comment .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--prof); font-weight: 600; }
+.corr-again { border: 1px dashed var(--accent); border-radius: 10px; padding: 12px; display: grid; gap: 8px; justify-items: start; }
+
 /* éditeur du catalogue (prof) */
 .cat-edit { min-width: 1040px; }
 .cat-edit td { padding: 4px 6px; }
@@ -436,9 +464,10 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=3"></script>
-<script src="editors.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="data.js?v=4"></script>
+<script src="editors.js?v=4"></script>
+<script src="correction.js?v=4"></script>
+<script src="app.js?v=4"></script>
 
 </body>
 </html>

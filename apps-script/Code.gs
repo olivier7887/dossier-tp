@@ -76,7 +76,7 @@ function doGet() {
       <a class="btn" href="${APP_URL}#cle=${cle}" target="_top">Ouvrir Dossier TP</a>
       <p class="petit">Après ce clic, l'app garde votre connexion pendant ${DUREE_CLE_JOURS} jours, même sans internet.</p>`;
   } catch (e) {
-    corps = `<h1>Connexion impossible</h1><p>${html_(e.message)}</p>`;
+    corps = `<h1>Connexion impossible</h1><p>${html_(e.message)}</p>${email ? `<p class="petit">Adresse transmise par Google : <b>${html_(email)}</b></p>` : ''}`;
   }
   return HtmlService.createHtmlOutput(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>body{font:16px/1.5 system-ui,sans-serif;background:#eceff2;color:#1b2129;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}
@@ -152,7 +152,7 @@ function verrou_(fn) { const l = LockService.getScriptLock(); l.waitLock(15000);
 function json_(s, d) { try { return s ? JSON.parse(s) : d; } catch (e) { return d; } }
 function nomDepuisEmail_(email) {
   const parts = email.split('@')[0].split('.');
-  if (parts[parts.length - 1] === 'student') parts.pop();
+  if (/^students?\d*$/.test(parts[parts.length - 1])) parts.pop();
   return { prenom: cap_(parts[0]), nom: parts.slice(1).map(cap_).join(' ') };
 }
 function utilisateur_(email) {

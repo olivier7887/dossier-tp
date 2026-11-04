@@ -39,7 +39,7 @@ function parseEmail(email) {
 
 function nameFromEmail(email) {
   const parts = String(email).split('@')[0].split('.');
-  if (parts[parts.length - 1] === 'student') parts.pop();
+  if (/^students?\d*$/.test(parts[parts.length - 1])) parts.pop();
   return { email, prenom: cap(parts[0] || ''), nom: parts.slice(1).map(cap).join(' ') };
 }
 

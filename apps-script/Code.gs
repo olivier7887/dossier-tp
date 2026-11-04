@@ -21,7 +21,7 @@ const DUREE_CLE_JOURS = 180;
 
 const ONGLETS = {
   profs: { nom: 'Profs', entetes: ['Adresse', 'Nom', 'Remarque'] },
-  classes: { nom: 'Classes', entetes: ['Classe', 'Professeur (adresse)', 'Remarque'] },
+  classes: { nom: 'Classes', entetes: ['Classe', 'Professeur (adresse)', 'Professeur 2 (facultatif)', 'Remarque'] },
   bloques: { nom: 'Bloqués', entetes: ['Adresse', 'Raison', 'Date'] },
   eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion', 'Professeur'] },
   dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique', 'Schémas à la main'] },
@@ -33,6 +33,12 @@ const ONGLETS = {
    ========================================================= */
 function installer() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // ancienne version de l'onglet Classes (Remarque en colonne C) : on déplace les remarques en D
+  const clsAncien = ss.getSheetByName('Classes');
+  if (clsAncien && String(clsAncien.getRange(1, 3).getValue()) === 'Remarque') {
+    const n = clsAncien.getLastRow();
+    if (n >= 2) { const r = clsAncien.getRange(2, 3, n - 1, 1); clsAncien.getRange(2, 4, n - 1, 1).setValues(r.getValues()); r.clearContent().clearDataValidations(); }
+  }
   for (const k in ONGLETS) {
     const o = ONGLETS[k];
     let sh = ss.getSheetByName(o.nom);
@@ -49,12 +55,12 @@ function installer() {
   PROFS_INITIAUX.forEach(([a, n]) => { if (!dejaProfs.includes(a)) profs.appendRow([a, n, 'Adresse à vérifier']); });
   const cls = ss.getSheetByName(ONGLETS.classes.nom);
   if (cls.getLastRow() < 2) {
-    const rows = CLASSES_INITIALES.map(([c, p]) => [c, p || moi, '']);
-    cls.getRange(2, 1, rows.length, 3).setValues(rows);
+    const rows = CLASSES_INITIALES.map(([c, p]) => [c, p || moi, '', '']);
+    cls.getRange(2, 1, rows.length, 4).setValues(rows);
   }
   // liste déroulante : le professeur d'une classe est choisi parmi les adresses de l'onglet Profs
-  cls.getRange('B2:B200').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(profs.getRange('A2:A200'), true).setAllowInvalid(false).build());
-  cls.setColumnWidth(1, 160); cls.setColumnWidth(2, 280);
+  cls.getRange('B2:C200').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(profs.getRange('A2:A200'), true).setAllowInvalid(false).build());
+  cls.setColumnWidth(1, 160); cls.setColumnWidth(2, 280); cls.setColumnWidth(3, 280);
   const cat = ss.getSheetByName(ONGLETS.catalogue.nom);
   if (cat.getLastRow() < 2) {
     const rows = CATALOGUE_INITIAL;
@@ -133,6 +139,7 @@ const ACTIONS = {
   catSuppr: (u, q) => (prof_(u), catSuppr_(String(q.id))),
   joindre: (u, q) => joindre_(u, String(q.ex), String(q.partie), String(q.fichier || ''), String(q.nom || '')),
   retirer: (u, q) => retirer_(u, String(q.ex), String(q.partie)),
+  monFichier: (u, q) => monFichier_(u, String(q.id)),
   profAffecter: (u, q) => (prof_(u), profAffecter_(String(q.email).toLowerCase(), String(q.classe || ''), String(q.prof || '').toLowerCase())),
   profNouvelleAnnee: (u, q) => (admin_(u), nouvelleAnnee_(String(q.confirmation || ''))),
 };
@@ -190,7 +197,7 @@ function admin_(u) { prof_(u); if (!estAdmin_(u.email)) throw new Error('Réserv
 function anneeScolaire_(d) { const y = d.getFullYear(); return d.getMonth() >= 7 ? y + '-' + (y + 1) : (y - 1) + '-' + y; }
 function annee_() { return PropertiesService.getScriptProperties().getProperty('ANNEE') || anneeScolaire_(new Date()); }
 function listeProfs_() { return lignes_('profs').filter(r => String(r[0]).trim()).map(r => ({ email: String(r[0]).trim().toLowerCase(), nom: String(r[1] || '').trim() || nomDepuisEmail_(String(r[0]).trim().toLowerCase()).nom })); }
-function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).trim()).map(r => ({ classe: String(r[0]).trim(), prof: String(r[1] || '').trim().toLowerCase() })); }
+function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).trim()).map(r => ({ classe: String(r[0]).trim(), prof: String(r[1] || '').trim().toLowerCase(), prof2: String(r[2] || '').trim().toLowerCase() })); }
 
 /* =========================================================
    Élève
@@ -320,6 +327,14 @@ function retirer_(u, ex, partie) {
     onglet_('dossiers').getRange(i + 2, 13).setValue(JSON.stringify(mains));
     return mains;
   });
+}
+
+function monFichier_(u, id) {
+  // l'élève ne peut lire que la photo et les schémas de ses propres dossiers
+  const a = id && lignes_('dossiers').some(r => String(r[0]).toLowerCase() === u.email &&
+    (String(r[6]) === id || Object.values(json_(r[12], {}) || {}).some(m => m && m.id === id)));
+  if (!a) throw new Error('Fichier introuvable.');
+  return profPhoto_(id);
 }
 
 function reprendre_(u, ex) {
@@ -476,7 +491,7 @@ const PROFS_INITIAUX = [
   ['gregory.baudson@elmarche.be', 'Baudson Grégory'],
   ['logan.degossly@elmarche.be', 'Degossly Logan'],
 ];
-// [classe, adresse du professeur] (vide = propriétaire)
+// [classe, adresse du professeur] (vide = propriétaire) ; le 2e professeur se met dans la colonne C du Sheet
 const CLASSES_INITIALES = [
   ['3P Élec', ''],
   ['3QEM groupe 1', ''],

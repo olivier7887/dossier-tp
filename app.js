@@ -8,7 +8,7 @@ const ONLINE = !!(CFG.apiUrl && CFG.loginUrl);
 const DOMAINE = 'elmarche.be';
 const PROFS_DEMO = ['olivier.lesenfants@elmarche.be'];
 const LISTES_DEMO = {
-  classes: [['3P Élec', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 1', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 2', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 3', 'gregory.baudson@elmarche.be'], ['3P Poly', 'logan.degossly@elmarche.be']].map(([classe, prof]) => ({ classe, prof })),
+  classes: [['3P Élec', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 1', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 2', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 3', 'gregory.baudson@elmarche.be'], ['3P Poly', 'logan.degossly@elmarche.be']].map(([classe, prof]) => ({ classe, prof, prof2: '' })),
   profs: [['olivier.lesenfants@elmarche.be', 'Lesenfants Olivier'], ['philippe.dachelet@elmarche.be', 'Dachelet Philippe'], ['gregory.baudson@elmarche.be', 'Baudson Grégory'], ['logan.degossly@elmarche.be', 'Degossly Logan']].map(([email, nom]) => ({ email, nom })),
 };
 const $ = (s, r = document) => r.querySelector(s);
@@ -29,6 +29,8 @@ const store = {
 let LISTES = ONLINE ? store.get('tp3pelec:listes', { classes: [], profs: [] }) : LISTES_DEMO;
 const nomProf = em => { const p = LISTES.profs.find(x => x.email === em); return p ? p.nom : (em ? nameFromEmail(em).nom + ' ' + nameFromEmail(em).prenom : ''); };
 const profDeClasse = c => (LISTES.classes.find(x => x.classe === c) || {}).prof || '';
+const profsDeClasse = c => { const x = LISTES.classes.find(k => k.classe === c); return x ? [x.prof, x.prof2].filter(Boolean) : []; };
+const classeDuProf = (c, em) => c.prof === em || c.prof2 === em;
 function profilIncomplet() {
   if (!DATA.profil.confirme) return true;
   if (!LISTES.classes.length) return false;
@@ -379,16 +381,8 @@ function exView(main) {
   const tabLbl = tabs.find(t => t[0] === tab)[1];
   main.innerHTML = `
     <div class="crumbs"><button type="button" class="as-link" data-nav2="home">← ${USER.role === 'prof' ? (CTX.eleve ? 'Mes élèves' : 'Exercices') : 'Mes TP'}</button>
-      ${canPrint ? '<button type="button" class="btn ghost small" id="print">Imprimer cette feuille</button>' : ''}</div>
-    <section class="cartouche" aria-label="En-tête de la feuille">
-      <div class="c-school"><b>Institut Saint-Roch</b><span>Marche-en-Famenne</span><span>Travaux pratiques · électricité</span></div>
-      <div class="c-cell"><span class="k">Nom</span><span class="v">${esc(p.nom)}</span></div>
-      <div class="c-cell"><span class="k">Prénom</span><span class="v">${esc(p.prenom)}</span></div>
-      <div class="c-cell"><span class="k">Classe</span><span class="v">${esc(p.classe || '3Pélec')}</span></div>
-      <div class="c-cell"><span class="k">Date</span><span class="v mono">${today()}</span></div>
-      <div class="c-tp"><span class="k">TP ${esc(ex.num)}</span><span class="v">${esc(ex.titre)}</span></div>
-      <div class="c-sheet"><span class="k">Feuille</span><span class="v">${esc(tabLbl)}</span></div>
-    </section>
+      ${canPrint ? '<span class="row wrapr"><button type="button" class="btn ghost small" id="print">Imprimer cette feuille</button><button type="button" class="btn small" id="print-all">Imprimer tout le dossier</button></span>' : ''}</div>
+    ${cartouche(p, ex, tabLbl)}
     ${USER.role === 'prof' && CTX.eleve ? `<p class="notice prof">Dossier de <b>${esc(p.prenom)} ${esc(p.nom)}</b> (${esc(email)}) · ${PV.remis ? 'remis' : PV.data && PV.data.maj ? 'en cours' : 'pas encore commencé'}. Consultation : vos modifications ne sont pas enregistrées.</p>` : ''}
     ${USER.role === 'prof' && !CTX.eleve ? `<p class="notice prof">Aperçu professeur : version de l'exercice pour <b>${esc(email)}</b>.${ONLINE ? ' Rien n\'est enregistré.' : ` <label class="inline">Autre élève <input id="pv-email" type="email" value="${esc(email)}"></label>`}</p>` : ''}
     ${USER.role === 'eleve' && d.remis ? (d.correction && (d.remises || 1) < 2 ? '<p class="notice">Ce dossier est corrigé. Lisez la correction : vous pouvez ensuite le corriger et le remettre une seconde fois.</p>' : d.correction ? '<p class="notice">Ce dossier est corrigé.</p>' : '<p class="notice">Ce dossier est remis : il ne peut plus être modifié en attendant la correction du professeur.</p>') : ''}
@@ -397,22 +391,127 @@ function exView(main) {
   main.querySelector('[data-nav2]').addEventListener('click', () => go({ page: 'home' }));
   main.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.tab }))));
   const pr = $('#print'); if (pr) pr.addEventListener('click', () => window.print());
+  const pa = $('#print-all'); if (pa) pa.addEventListener('click', () => imprimerTout(pa, { ex, v, d, p, tabs }));
   const pv = $('#pv-email'); if (pv) pv.addEventListener('change', () => { if (!parseEmail(pv.value).error) go(Object.assign({}, VIEW, { eleve: pv.value.trim().toLowerCase() })); });
   main.querySelector('[data-nav2]').addEventListener('click', () => { if (CTX.eleve) PV = null; });
-  const sheet = $('#sheet');
+  EDITOR = renderTab(tab, $('#sheet'), ex, v, d);
+}
+function cartouche(p, ex, tabLbl) {
+  return `<section class="cartouche" aria-label="En-tête de la feuille">
+      <div class="c-school"><b>Institut Saint-Roch</b><span>Marche-en-Famenne</span><span>Travaux pratiques · électricité</span></div>
+      <div class="c-cell"><span class="k">Nom</span><span class="v">${esc(p.nom)}</span></div>
+      <div class="c-cell"><span class="k">Prénom</span><span class="v">${esc(p.prenom)}</span></div>
+      <div class="c-cell"><span class="k">Classe</span><span class="v">${esc(p.classe || '—')}</span></div>
+      <div class="c-cell"><span class="k">Date</span><span class="v mono">${today()}</span></div>
+      <div class="c-tp"><span class="k">TP ${esc(ex.num)}</span><span class="v">${esc(ex.titre)}</span></div>
+      <div class="c-sheet"><span class="k">Feuille</span><span class="v">${esc(tabLbl)}</span></div>
+    </section>`;
+}
+function renderTab(tab, sheet, ex, v, d) {
   const onChange = () => save();
+  let ed = null;
   ({
     enonce: () => enonceSheet(sheet, ex, v),
     mode: () => modeSheet(sheet, ex, d),
-    principe: () => { sheet.innerHTML = sheetHead('Schéma de principe', 'Dessinez le circuit entre L1 et N. Le disjoncteur bipolaire et la terre sont déjà imprimés.', 'sch-principe') + '<div id="ed"></div>'; EDITOR = new PrincipeEditor($('#ed'), d.principe, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'principe'); },
-    unifilaire: () => { sheet.innerHTML = sheetHead('Schéma unifilaire', 'Complétez la protection, la canalisation et les points raccordés. Le schéma se dessine à droite, comme dans Trikker.', 'sch-unifilaire') + '<div id="ed"></div>'; EDITOR = new UnifilaireEditor($('#ed'), d.unifilaire, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'unifilaire'); },
-    cablage: () => { sheet.innerHTML = sheetHead('Schéma de câblage', 'Placez les appareils aux emplacements de l\'énoncé, posez les douilles, puis tirez chaque fil. Dans la boîte, chaque point noir correspond à une borne Wago.', 'sch-cablage') + '<div id="ed"></div>'; EDITOR = new CablageEditor($('#ed'), d.cablage, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'cablage'); },
+    principe: () => { sheet.innerHTML = sheetHead('Schéma de principe', 'Dessinez le circuit entre L1 et N. Le disjoncteur bipolaire et la terre sont déjà imprimés.', 'sch-principe') + '<div id="ed"></div>'; ed = new PrincipeEditor($('#ed'), d.principe, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'principe'); },
+    unifilaire: () => { sheet.innerHTML = sheetHead('Schéma unifilaire', 'Complétez la protection, la canalisation et les points raccordés. Le schéma se dessine à droite, comme dans Trikker.', 'sch-unifilaire') + '<div id="ed"></div>'; ed = new UnifilaireEditor($('#ed'), d.unifilaire, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'unifilaire'); },
+    cablage: () => { sheet.innerHTML = sheetHead('Schéma de câblage', 'Placez les appareils aux emplacements de l\'énoncé, posez les douilles, puis tirez chaque fil. Dans la boîte, chaque point noir correspond à une borne Wago.', 'sch-cablage') + '<div id="ed"></div>'; ed = new CablageEditor($('#ed'), d.cablage, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'cablage'); },
     position: () => { sheet.innerHTML = sheetHead('Schéma de position', 'Planche vue de face, cotes en mm. Reportez ces cotes au crayon sur la planche avant de fixer quoi que ce soit.', 'sch-position') + '<div class="svg-wrap paper-wrap" id="pos"></div>'; renderPosition($('#pos')); bindFiches(sheet); mainBox(sheet, ex, d, 'position'); },
     bdc: () => bdcSheet(sheet, ex, v, d),
     outils: () => outilsSheet(sheet, ex, d),
     remise: () => remiseSheet(sheet, ex, d),
     correction: () => correctionSheet(sheet, ex, v, d),
   })[tab]();
+  return ed;
+}
+
+/* ---------- impression du dossier complet (toutes les feuilles + photos) ---------- */
+let IMPRESSION = false;
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let PDFJS = null;
+function chargerPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return PDFJS ||= new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = PDFJS_URL + 'pdf.min.js';
+    sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_URL + 'pdf.worker.min.js'; res(window.pdfjsLib); };
+    sc.onerror = () => { PDFJS = null; rej(new Error('pdf.js indisponible')); };
+    document.head.appendChild(sc);
+  });
+}
+async function pdfEnImages(dataUrl) {
+  const lib = await chargerPdfJs();
+  const bin = atob(dataUrl.split(',')[1]), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const doc = await lib.getDocument({ data: u8 }).promise, out = [];
+  for (let i = 1; i <= Math.min(doc.numPages, 6); i++) {
+    const pg = await doc.getPage(i), vp = pg.getViewport({ scale: 2 });
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    out.push(c.toDataURL('image/jpeg', 0.85));
+  }
+  return out;
+}
+// renvoie la photo du montage et les schémas à la main, sous forme de data URL
+async function fichiersDossier(ex, d) {
+  const prof = USER.role === 'prof';
+  if (prof && !CTX.eleve) return { photo: null, mains: {} };
+  const photoId = prof ? PV.photoId : d.photoId;
+  const mains = (prof ? PV.mains : d.mains) || {};
+  const lire = id => api(prof ? 'profPhoto' : 'monFichier', { id });
+  const res = { photo: null, mains: {} };
+  const t = [];
+  if (!prof && PHOTOS[ex.id]) res.photo = PHOTOS[ex.id];
+  else if (photoId && ONLINE) t.push(lire(photoId).then(u => { res.photo = u; }).catch(() => { res.photo = 'erreur'; }));
+  for (const [k, m] of Object.entries(mains)) {
+    if (!PARTIES_MAIN[k] || !m) continue;
+    const local = m.data || (!prof && MAIN_PREV[ex.id + '|' + k]);
+    const p = local ? Promise.resolve(local) : (ONLINE && m.id ? lire(m.id) : Promise.reject(new Error('absent')));
+    t.push(p.then(async u => {
+      res.mains[k] = { m, imgs: /^data:application\/pdf/.test(u) ? await pdfEnImages(u).catch(() => null) : [u] };
+    }).catch(() => { res.mains[k] = { m, imgs: null }; }));
+  }
+  await Promise.all(t);
+  return res;
+}
+async function imprimerTout(btn, c) {
+  const { ex, v, d, p, tabs } = c;
+  const lbl = btn.textContent; btn.disabled = true; btn.textContent = 'Préparation…';
+  let f;
+  try { f = await fichiersDossier(ex, d); } catch (e) { f = { photo: null, mains: {} }; }
+  btn.disabled = false; btn.textContent = lbl;
+  const main = $('#main'); if (!main) return;
+  if (EDITOR && EDITOR.destroy) EDITOR.destroy(); EDITOR = null;
+  const eds = [];
+  IMPRESSION = true;
+  main.innerHTML = `<div class="crumbs no-print-all"><button type="button" class="btn small" id="pa-retour">← Revenir au dossier</button><span class="muted small">Si la fenêtre d'impression ne s'ouvre pas, utilisez Ctrl+P.</span></div><div class="print-all"></div>`;
+  const root = main.querySelector('.print-all');
+  const page = (titre, html) => { const sec = document.createElement('section'); sec.className = 'print-page'; sec.innerHTML = cartouche(p, ex, titre) + (html || ''); root.appendChild(sec); return sec; };
+  const renommer = (sec, i) => sec.querySelectorAll('[id]').forEach(el => { if (!(el instanceof SVGElement)) el.id = el.id + '--p' + i; });
+  try {
+    tabs.forEach(([k, l], i) => {
+      const sec = page(l, '<div class="sheet"></div>');
+      const sheet = sec.querySelector('.sheet');
+      try { const ed = renderTab(k, sheet, ex, v, d); if (ed) eds.push(ed); } catch (e) { sheet.innerHTML = `<p class="err">${esc(l)} : impossible d'imprimer cette feuille.</p>`; }
+      sheet.querySelectorAll('.main-box').forEach(b => b.remove());
+      if (k === 'remise') {
+        const pb = sheet.querySelector('.photo-box');
+        if (pb) pb.innerHTML = `<h3>Photo ${ex.kind === 'planche' ? 'de la planche' : 'du montage'}</h3>${f.photo && f.photo !== 'erreur' ? `<img class="print-img" src="${f.photo}" alt="Photo du montage">` : `<p class="muted">${f.photo === 'erreur' ? 'Photo indisponible (pas de connexion ?).' : 'Pas de photo jointe.'}</p>`}`;
+      }
+      renommer(sec, i);
+      const mk = { principe: 'principe', unifilaire: 'unifilaire', cablage: 'cablage', position: 'position' }[k];
+      const fm = mk && f.mains[mk];
+      if (fm) {
+        const s2 = page(PARTIES_MAIN[mk] + ' (à la main)', `<div class="sheet"><div class="sheet-head"><div><h2>${PARTIES_MAIN[mk]} fait à la main</h2><p>${esc(fm.m.nom || '')}</p></div></div>
+          ${fm.imgs ? fm.imgs.map(u => `<img class="print-img" src="${u}" alt="${PARTIES_MAIN[mk]} fait à la main">`).join('') : '<p class="muted">Fichier joint en PDF : il n\'a pas pu être inséré ici (pas de connexion ?). Imprimez-le séparément.</p>'}</div>`);
+        renommer(s2, i + 'm');
+      }
+    });
+  } finally { IMPRESSION = false; }
+  const fin = () => { eds.forEach(e => e.destroy && e.destroy()); window.removeEventListener('afterprint', fin); if (VIEW.page === 'ex') go(VIEW); };
+  $('#pa-retour').addEventListener('click', fin);
+  await Promise.all([...root.querySelectorAll('img')].map(im => im.decode ? im.decode().catch(() => {}) : null));
+  window.addEventListener('afterprint', fin);
+  setTimeout(() => window.print(), 50);
 }
 function sheetHead(titre, txt, fiche) {
   return `<div class="sheet-head"><div><h2>${titre}</h2><p>${txt}</p></div>${fiche ? `<button type="button" class="btn ghost small" data-fiche="${fiche}">Comment faire ?</button>` : ''}</div>`;
@@ -734,7 +833,7 @@ function remiseSheet(sheet, ex, d) {
       ? `<div class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span><button type="button" class="btn primary" data-goto="correction">Corriger</button><button type="button" class="btn ghost" id="rendre">Rendre le dossier à l\'élève</button>' : '<span class="state">Pas encore remis</span>'}<span id="rem-msg" class="muted" role="status"></span></div>`
       : `<div class="row wrapr"><button type="button" class="btn primary" id="remettre" ${remis ? 'disabled' : ''}>${remis ? 'Dossier remis' : (d.remises || 0) >= 1 ? 'Remettre le dossier (seconde remise)' : 'Remettre le dossier'}</button>${d.correction ? '<button type="button" class="btn" data-goto="correction">Voir la correction</button>' : remis && ONLINE ? '<span class="muted">En attente de la correction du professeur.</span>' : ''}<span id="rem-msg" class="muted" role="status"></span></div>`}`;
   sheet.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.goto }))));
-  if (prof && PV.photoId) {
+  if (prof && PV.photoId && !IMPRESSION) {
     $('#photo-prev').innerHTML = '<p class="muted">Chargement de la photo…</p>';
     api('profPhoto', { id: PV.photoId }).then(url => { $('#photo-prev').innerHTML = `<img src="${url}" alt="Photo du montage de l'élève">`; })
       .catch(e => { $('#photo-prev').innerHTML = `<p class="err">${esc(e.message)}</p>`; });
@@ -1005,10 +1104,12 @@ function apprendreView(main) {
 let ELEVES = null, FILTRE_ELEVES = '', FILTRE_CLASSE = '';
 let VUE_ELEVES = store.get('tp3pelec:vue-eleves', null);
 const profEleve = e => e.prof || profDeClasse(e.classe);
-const estMonEleve = e => profEleve(e) === USER.email;
+// un élève est « à moi » s'il m'a choisi, ou si je suis l'un des (au plus 2) professeurs de sa classe
+const estMonEleve = e => e.prof === USER.email || profsDeClasse(e.classe).includes(USER.email);
+const nomsProfsEleve = e => { const l = [...new Set([e.prof, ...profsDeClasse(e.classe)].filter(Boolean))]; return l.map(nomProf).join(' / '); };
 function vueEleves() {
   if (VUE_ELEVES) return VUE_ELEVES;
-  return LISTES.classes.some(c => c.prof === USER.email) || (ELEVES || []).some(estMonEleve) ? 'mes' : 'tous';
+  return LISTES.classes.some(c => classeDuProf(c, USER.email)) || (ELEVES || []).some(estMonEleve) ? 'mes' : 'tous';
 }
 function classesConnues() { return [...new Set([...LISTES.classes.map(c => c.classe), ...(ELEVES || []).map(e => e.classe).filter(Boolean)])]; }
 function profHome(main) {
@@ -1044,7 +1145,7 @@ function profHome(main) {
   const majFiltres = () => {
     const vue = vueEleves();
     main.querySelectorAll('[data-vue]').forEach(b => { b.classList.toggle('on', b.dataset.vue === vue); b.setAttribute('aria-pressed', b.dataset.vue === vue); });
-    const cls = classesConnues().filter(c => vue === 'tous' || LISTES.classes.some(x => x.classe === c && x.prof === USER.email) || (ELEVES || []).some(e => e.classe === c && estMonEleve(e)));
+    const cls = classesConnues().filter(c => vue === 'tous' || LISTES.classes.some(x => x.classe === c && classeDuProf(x, USER.email)) || (ELEVES || []).some(e => e.classe === c && estMonEleve(e)));
     if (FILTRE_CLASSE && !cls.includes(FILTRE_CLASSE)) FILTRE_CLASSE = '';
     $('#el-classe').innerHTML = `<option value="">Toutes</option>${cls.map(c => `<option ${c === FILTRE_CLASSE ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
   };
@@ -1062,7 +1163,7 @@ function profHome(main) {
     }
     box.innerHTML = `<table class="tbl eleves"><thead><tr><th>Élève</th><th>Classe</th><th class="c">Planche</th>${EXERCICES.map(x => `<th class="c">TP ${x.num}</th>`).join('')}</tr></thead>
       <tbody>${list.map(e => `<tr><td><b>${esc(e.nom)}</b> ${esc(e.prenom)}<span class="muted small mail">${esc(e.email)}</span></td>
-        <td><span class="cl-cell"><span>${esc(e.classe || '—')}<span class="muted small mail">${esc(nomProf(profEleve(e)) || 'sans professeur')}</span></span><button type="button" class="ibtn small-i" data-aff="${esc(e.email)}" title="Changer la classe ou le professeur" aria-label="Changer la classe ou le professeur de ${esc(e.prenom)} ${esc(e.nom)}">✎</button></span></td>
+        <td><span class="cl-cell"><span>${esc(e.classe || '—')}<span class="muted small mail">${esc(nomsProfsEleve(e) || 'sans professeur')}</span></span><button type="button" class="ibtn small-i" data-aff="${esc(e.email)}" title="Changer la classe ou le professeur" aria-label="Changer la classe ou le professeur de ${esc(e.prenom)} ${esc(e.nom)}">✎</button></span></td>
         <td class="c">${e.planche ? '<span class="state ok">validée</span>' : '<span class="muted">—</span>'}</td>
         ${EXERCICES.map(x => { const st = e.ex[x.id]; const lbl = st ? (st.corrige && st.remis ? 'corrigé' : st.remis ? 'à corriger' : 'en cours') : '—'; const cls = st ? (st.corrige && st.remis ? 'ok' : st.remis ? 'todo' : 'cur') : '';
           return `<td class="c"><button type="button" class="cell-btn state ${cls}" data-el="${esc(e.email)}" data-x="${x.id}" data-remis="${st && st.remis ? 1 : 0}" title="TP ${x.num} – ${esc(e.prenom)} ${esc(e.nom)}">${lbl}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table>`;

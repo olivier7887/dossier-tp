@@ -200,7 +200,12 @@ function creerView(main) {
     const d = { uid: CR_UID++, type: t, touches: Array.from({ length: nbTouches(t) }, () => []) };
     const L = libres(), g = groupeVVIncomplet();
     if (t === 'sch5' || t === 'sch66') d.touches.forEach((tc, k) => { if (L[k] != null) tc.push(L[k]); });
-    else if (t === 'sch6' || t === 'sch62' || t === 'sch7') { if (g != null) d.touches[0].push(...crCharges(c).filter(ch => crUnites(c, ch).map(u => u.i + ':' + u.k).sort().join() === crUnites(c, g).map(u => u.i + ':' + u.k).sort().join())); else if (L.length) d.touches[0].push(L[0]); }
+    else if (t === 'sch6' || t === 'sch62' || t === 'sch7') {
+      // sch 6 / 6-2 : complète un va-et-vient commencé ; sch 7 : s'insère dans un va-et-vient complet
+      const cible = t === 'sch7' ? crCharges(c).find(ch => crUnites(c, ch).filter(u => u.sorte === 'vv').length === 2) : g;
+      const memes = ch0 => crCharges(c).filter(ch => crUnites(c, ch).map(u => u.i + ':' + u.k).sort().join() === crUnites(c, ch0).map(u => u.i + ':' + u.k).sort().join());
+      if (cible != null) d.touches[0].push(...memes(cible)); else if (t !== 'sch7' && L.length) d.touches[0].push(L[0]);
+    }
     else if (t !== 'prise' && L.length) d.touches[0].push(L[0]);
     c.devices.push(d);
     majTout();

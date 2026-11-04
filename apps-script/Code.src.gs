@@ -69,6 +69,17 @@ function installer() {
     cat.getRange(2, 7, rows.length, 1).setNumberFormat('0.00');
     cat.getRange(2, 9, rows.length, 2).insertCheckboxes();
     cat.setColumnWidth(3, 420);
+  } else {
+    // mise à jour : ajoute les nouveaux articles (sans toucher à vos prix ni à vos modifications)
+    const deja = new Set(lignes_('catalogue').map(r => String(r[0])));
+    const nouveaux = CATALOGUE_INITIAL.filter(r => !deja.has(String(r[0])));
+    if (nouveaux.length) {
+      const d = cat.getLastRow() + 1;
+      cat.getRange(d, 1, nouveaux.length, nouveaux[0].length).setValues(nouveaux);
+      cat.getRange(d, 7, nouveaux.length, 1).setNumberFormat('0.00');
+      cat.getRange(d, 9, nouveaux.length, 2).insertCheckboxes();
+      cat.getRange(d, 9, nouveaux.length, 2).setValues(nouveaux.map(r => [r[8], r[9]]));
+    }
   }
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('SECRET')) props.setProperty('SECRET', Utilities.getUuid() + Utilities.getUuid());
@@ -427,7 +438,7 @@ function listeExercices_(role) {
 function exSauver_(u, e) {
   const id = String(e.id || ('x' + Date.now().toString(36))).replace(/[^\w-]/g, '').slice(0, 30);
   if (/^tp\d/.test(id)) throw new Error('Identifiant réservé.');
-  const def = { court: String(e.court || '').slice(0, 60), intro: String(e.intro || '').slice(0, 600), devices: e.devices || [], lampes: Number(e.lampes) || 0, cmd: e.cmd || [], montage: e.montage || '', vv: !!e.vv };
+  const def = { court: String(e.court || '').slice(0, 60), intro: String(e.intro || '').slice(0, 600), devices: e.devices || [], lampes: Number(e.lampes) || 0, cmd: e.cmd || [], touches: e.touches || null, montage: e.montage || '', vv: !!e.vv };
   const json = JSON.stringify(def);
   if (json.length > 5000) throw new Error('Exercice trop volumineux.');
   return verrou_(() => {

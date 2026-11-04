@@ -13,9 +13,9 @@ const BAREME = {
 };
 
 /* ---------- références ---------- */
-const COMPLET = { sch1: '61100', sch2: '61200', sch5: '61500', sch6: '61600', sch7: '61700', prise: ['66600', '66100'] };
-const SOCLE = { sch1: ['170-01100', '170-01105'], sch2: ['170-01200', '170-01205'], sch5: ['170-01500', '170-01505'], sch6: ['170-01600', '170-01605'], sch7: ['170-01700', '170-01705'], prise: ['170-33100', '170-32100', '170-33105', '170-32105'] };
-const SET_FIN = { sch1: '61105', sch2: '61105', sch6: '61105', sch7: '61105', sch5: '61505', prise: ['66601', '66101'] };
+const COMPLET = { sch1: '61100', sch2: '61200', sch5: '61500', sch6: '61600', sch7: '61700', sch62: '62200', sch66: '62600', prise: ['66600', '66100'] };
+const SOCLE = { sch1: ['170-01100', '170-01105'], sch2: ['170-01200', '170-01205'], sch5: ['170-01500', '170-01505'], sch6: ['170-01600', '170-01605'], sch7: ['170-01700', '170-01705'], sch62: ['170-02200', '170-02205'], sch66: ['170-02600', '170-02605'], prise: ['170-33100', '170-32100', '170-33105', '170-32105'] };
+const SET_FIN = { sch1: '61105', sch2: '61105', sch6: '61105', sch7: '61105', sch62: '61105', sch5: '61505', sch66: '61505', prise: ['66601', '66101'] };
 const CODE_COUL = { 'crème': '100', 'blanc': '101', 'gris clair': '102' };
 const FIL_COUL = { bleu: 'bleu', vj: 'vert-jaune', brun: 'brun', noir: 'noir', gris: 'gris', rouge: 'rouge' };
 // Matériel de la planche (TP 0) : proposition à valider par le professeur
@@ -45,6 +45,8 @@ function UF() {
 const maj1 = s => s.charAt(0).toUpperCase() + s.slice(1);
 const nomType = t => APPAREILS[t] ? `${APPAREILS[t].nom.toLowerCase()} (${APPAREILS[t].court})` : t;
 const pl = n => n > 1 ? 's' : '';
+// « de la lampe 1 », « de la prise PC »
+const deNom = l => 'de ' + (l.prise ? l.nom.replace(/^La /, 'la ') : 'la ' + l.nom.toLowerCase());
 
 /* =========================================================
    Simulation commune : réseau de « nets », contacts, charges
@@ -120,6 +122,10 @@ function contactsType(type, T) {
     case 'sch5': return [[[], [[T('L'), T('1')]]], [[], [[T('L'), T('2')]]]];
     case 'sch6': return [[[[T('L'), T('1')]], [[T('L'), T("1'")]]]];
     case 'sch7': return [[[[T('a'), T('b')], [T('d'), T('c')]], [[T('a'), T('c')], [T('d'), T('b')]]]];
+    // va-et-vient bipolaire : une touche bascule les deux pôles
+    case 'sch62': return [[[[T('L1'), T('1')], [T('L2'), T('2')]], [[T('L1'), T("1'")], [T('L2'), T("2'")]]]];
+    // va-et-vient double : deux touches indépendantes
+    case 'sch66': return [[[[T('L1'), T('1')]], [[T('L1'), T("1'")]]], [[[T('L2'), T('2')]], [[T('L2'), T("2'")]]]];
     default: return [];
   }
 }
@@ -132,8 +138,8 @@ function constatsFonction(c, A, attendu, lieu) {
   if (A.courts.length) return F;
   for (const l of c.lamps) {
     const cmd = A.commande.get(l.id);
-    if (A.toujours.get(l.id)) F.push({ g: 'erreur', msg: `${l.nom} reste toujours allumée : elle n'est commandée par aucun interrupteur.` });
-    else if (!A.etats.some(x => x.r.allumees.has(l.id))) F.push({ g: 'erreur', msg: `${l.nom} ne s'allume jamais : vérifiez la phase, le retour et le neutre jusqu'à la douille.` });
+    if (A.toujours.get(l.id)) F.push({ g: 'erreur', msg: l.prise ? `${l.nom} reste toujours sous tension : elle devait être commandée par un interrupteur.` : `${l.nom} reste toujours allumée : elle n'est commandée par aucun interrupteur.` });
+    else if (!A.etats.some(x => x.r.allumees.has(l.id))) F.push({ g: 'erreur', msg: l.prise ? `${l.nom} n'est jamais alimentée : vérifiez la phase (retour de l'interrupteur) et le neutre jusqu'à la prise.` : `${l.nom} ne s'allume jamais : vérifiez la phase, le retour et le neutre jusqu'à la douille.` });
     else if (!cmd.size) F.push({ g: 'erreur', msg: `${l.nom} n'est commandée par aucun interrupteur.` });
   }
   // correspondance avec l'énoncé
@@ -149,24 +155,27 @@ function constatsFonction(c, A, attendu, lieu) {
       const pos = [...new Set(cmdIds.map(id => (c.switches.find(s => s.id === id) || {}).pos))].sort();
       if (JSON.stringify(pos) !== JSON.stringify([...e.pos].sort())) F.push({ g: 'erreur', msg: `${l.nom} est commandée depuis le mauvais emplacement (voir l'énoncé).` });
     }
-    // va-et-vient : chaque interrupteur doit TOUJOURS pouvoir changer l'état de la lampe
-    if (ok && e.types.filter(t => t === 'sch6').length >= 2) {
-      const vv = c.switches.filter(s => s.type === 'sch6' && cmdIds.includes(s.id));
-      if (!vv.every(s => A.toujoursCommande(l.id, s.id, 0))) F.push({ g: 'erreur', msg: `Va-et-vient de ${l.nom} mal raccordé : un des deux interrupteurs ne commande plus la lampe dans certaines positions. Vérifiez les navettes (1 et 1') et les communs (L).`, fiche: 'app-sch6' });
-      else F.push({ g: 'ok', msg: `Le va-et-vient de ${l.nom} fonctionne depuis les deux endroits.` });
+    // va-et-vient (sch 6, 6/2, 6+6, avec ou sans permutateur) : chaque appareil doit TOUJOURS pouvoir changer l'état de la charge
+    if (ok && e.types.filter(t => t === 'sch6' || t === 'sch62' || t === 'sch66').length >= 2) {
+      const vv = c.switches.filter(s => VV_TYPES.includes(s.type) && cmdIds.includes(s.id));
+      const touchesDeS = s => [...A.commande.get(l.id)].filter(k => k.split('#')[0] === s.id).map(k => +k.split('#')[1]);
+      const fiche = e.types.includes('sch66') ? 'app-sch66' : e.types.includes('sch62') ? 'app-sch62' : 'app-sch6';
+      if (!vv.every(s => touchesDeS(s).some(k => A.toujoursCommande(l.id, s.id, k)))) F.push({ g: 'erreur', msg: `Va-et-vient ${deNom(l)} mal raccordé : un des interrupteurs ne la commande plus dans certaines positions. Vérifiez les navettes et les communs.`, fiche });
+      else F.push({ g: 'ok', msg: `Le va-et-vient ${deNom(l)} fonctionne depuis chaque endroit.` });
     } else if (ok) F.push({ g: 'ok', msg: `${l.nom} est commandée par ${e.types.map(nomType).join(' et ')}, comme demandé.` });
   }
   // double allumage : chaque touche commande une lampe différente
-  for (const s of c.switches.filter(s => s.type === 'sch5')) {
+  for (const s of c.switches.filter(s => s.type === 'sch5' || s.type === 'sch66')) {
     const parTouche = [0, 1].map(k => c.lamps.filter(l => A.commande.get(l.id).has(s.id + '#' + k)).map(l => l.id).join());
-    if (parTouche[0] && parTouche[1] && parTouche[0] === parTouche[1]) F.push({ g: 'erreur', msg: 'Les deux touches du double allumage commandent la même lampe : chaque touche doit commander sa propre lampe.', fiche: 'app-sch5' });
+    if (parTouche[0] && parTouche[1] && parTouche[0] === parTouche[1]) F.push(s.type === 'sch5' ? { g: 'erreur', msg: 'Les deux touches du double allumage commandent la même lampe : chaque touche doit commander sa propre lampe.', fiche: 'app-sch5' } : { g: 'erreur', msg: 'Les deux touches du va-et-vient double commandent la même lampe : chaque touche a son propre va-et-vient.', fiche: 'app-sch66' });
   }
   // série / parallèle
   if (attendu.montage === 'série' || attendu.montage === 'parallèle') {
     const etatsAllumes = A.etats.filter(x => x.r.allumees.size);
-    const serie = c.lamps.length === 2 && etatsAllumes.length && etatsAllumes.every(x => {
+    const vraies = c.lamps.filter(l => !l.prise);
+    const serie = vraies.length === 2 && etatsAllumes.length && etatsAllumes.every(x => {
       // en série : aucune lampe seule ne relie P à N
-      return c.lamps.every(l => { const a = x.r.u.find(l.a), b = x.r.u.find(l.b); return !((a === x.r.P && b === x.r.N) || (a === x.r.N && b === x.r.P)); });
+      return vraies.every(l => { const a = x.r.u.find(l.a), b = x.r.u.find(l.b); return !((a === x.r.P && b === x.r.N) || (a === x.r.N && b === x.r.P)); });
     });
     if (attendu.montage === 'série' && etatsAllumes.length) F.push(serie ? { g: 'ok', msg: 'Les deux lampes sont bien en série.' } : { g: 'erreur', msg: 'Les lampes devaient être raccordées en série (l\'une à la suite de l\'autre) : ici, chacune reçoit directement la phase et le neutre.' });
     if (attendu.montage === 'parallèle' && etatsAllumes.length) F.push(!serie ? { g: 'ok', msg: 'Les deux lampes sont bien en parallèle.' } : { g: 'erreur', msg: 'Les lampes devaient être en parallèle (chacune entre la phase commandée et le neutre) : ici, elles sont en série.' });
@@ -176,20 +185,21 @@ function constatsFonction(c, A, attendu, lieu) {
     const cmd = [...A.commande.get(l.id)].map(s => c.switches.find(x => x.id === s.split('#')[0]));
     if (!cmd.length || A.toujours.get(l.id)) continue;
     const eteints = A.etats.filter(x => !x.r.allumees.has(l.id));
-    if (cmd.every(s => s && s.type === 'sch2')) {
+    if (cmd.every(s => s && (s.type === 'sch2' || s.type === 'sch62'))) {
       const coupeTout = eteints.every(x => [l.a, l.b].every(t => { const n = x.r.u.find(t); return n !== x.r.P && n !== x.r.N; }));
-      F.push(coupeTout ? { g: 'ok', msg: `Le bipolaire coupe la phase et le neutre de ${l.nom}.` } : { g: 'erreur', msg: `Quand ${l.nom} est éteinte, elle reste reliée à la phase ou au neutre : un interrupteur bipolaire doit couper les deux.`, fiche: 'app-sch2' });
+      F.push(coupeTout ? { g: 'ok', msg: `La coupure bipolaire coupe la phase et le neutre ${deNom(l)}.` } : { g: 'erreur', msg: `Quand ${l.nom} est éteinte, elle reste reliée à la phase ou au neutre : un interrupteur bipolaire doit couper les deux.`, fiche: 'app-sch2' });
     } else if (attendu.montage !== 'série') {
       const phaseRestee = eteints.some(x => [l.a, l.b].some(t => x.r.u.find(t) === x.r.P));
-      if (phaseRestee) F.push({ g: 'erreur', msg: `${l.nom} : l'interrupteur coupe le neutre au lieu de la phase. Une lampe éteinte ne peut pas rester sous tension.`, code: '1902', fiche: 'app-sch1' });
-      else F.push({ g: 'ok', msg: `L'interrupteur de ${l.nom} coupe bien la phase.`, code: '1902' });
+      if (phaseRestee) F.push({ g: 'erreur', msg: `${l.nom} : l'interrupteur coupe le neutre au lieu de la phase. ${l.prise ? 'Une prise coupée' : 'Une lampe éteinte'} ne peut pas rester sous tension.`, code: '1902', fiche: 'app-sch1' });
+      else F.push({ g: 'ok', msg: `L'interrupteur ${deNom(l)} coupe bien la phase.`, code: '1902' });
     }
   }
   // prises : phase et neutre permanents, terre
   for (const p of c.prises) {
+    const terre = c.base.find(p.PE) === c.base.find(c.PE);
+    if (p.commandee) { F.push(terre ? { g: 'ok', msg: 'Le contact de terre de la prise commandée est raccordé.', code: '1218' } : { g: 'erreur', msg: 'Le contact de terre de la prise commandée n\'est pas raccordé à la terre.', code: '1218', fiche: 'app-prise' }); continue; }
     const ok = A.etats.every(x => { const a = x.r.u.find(p.L), b = x.r.u.find(p.N); return (a === x.r.P && b === x.r.N) || (a === x.r.N && b === x.r.P); });
     F.push(ok ? { g: 'ok', msg: 'La prise reçoit la phase et le neutre en permanence.' } : { g: 'erreur', msg: 'La prise doit recevoir la phase et le neutre en permanence (elle n\'est pas commandée par un interrupteur).', fiche: 'app-prise' });
-    const terre = c.base.find(p.PE) === c.base.find(c.PE);
     F.push(terre ? { g: 'ok', msg: 'Le contact de terre de la prise est raccordé.', code: '1218' } : { g: 'erreur', msg: 'Le contact de terre de la prise n\'est pas raccordé à la terre.', code: '1218', fiche: 'app-prise' });
   }
   return F;
@@ -199,11 +209,17 @@ function constatsFonction(c, A, attendu, lieu) {
    1. Schéma de câblage
    ========================================================= */
 function attenduExercice(ex, v) {
-  const lampes = v.lampes.map((l, j) => {
-    const devs = v.devices.filter((d, i) => (ex.cmd[i] || []).includes(j));
+  // charges commandées : lampes, et prises commandées par un interrupteur
+  const lampes = chargesEx(ex).map(ch => {
+    const devs = [...new Set(commandePar(ex, ch).map(([i]) => i))].map(i => v.devices[i]);
+    if (typeof ch === 'string') {
+      const d = v.devices[+ch.slice(1)];
+      return devs.length ? { ref: 'pc:' + d.pos, nom: 'La prise ' + d.rep, prise: true, types: devs.map(x => x.type), pos: devs.map(x => x.pos) } : null;
+    }
+    const l = v.lampes[ch];
     return { ref: l.pl, nom: l.nom, types: devs.map(d => d.type), pos: devs.map(d => d.pos) };
-  });
-  return { lampes, montage: ex.montage, prise: ex.devices.includes('prise') };
+  }).filter(Boolean);
+  return { lampes, montage: ex.montage, prise: ex.devices.includes('prise'), prisesCmd: prisesCommandees(ex).map(i => v.devices[i].pos) };
 }
 function corrigerCablage(ex, v, st) {
   const F = [];
@@ -226,9 +242,14 @@ function corrigerCablage(ex, v, st) {
   ['a:L', 'a:N', 'a:PE'].forEach(k => base.find(k));
   for (const w of wires) base.union(key(w.a), key(w.b));
   const c = { base, P: 'a:L', N: 'a:N', PE: 'a:PE', switches: [], lamps: [], prises: [] };
+  const att = attenduExercice(ex, v);
   for (const pos in placed) {
     const t = placed[pos], T = b => `d:${pos}:${b}`;
-    if (t === 'prise') c.prises.push({ id: pos, L: T('L'), N: T('N'), PE: T('⏚') });
+    if (t === 'prise') {
+      const commandee = att.prisesCmd.includes(pos);
+      c.prises.push({ id: pos, L: T('L'), N: T('N'), PE: T('⏚'), commandee });
+      if (commandee) c.lamps.push({ id: 'pc:' + pos, ref: 'pc:' + pos, nom: 'La prise ' + ((v.devices.find(d => d.pos === pos) || {}).rep || 'PC'), a: T('L'), b: T('N'), prise: true });
+    }
     else c.switches.push({ id: pos, pos, type: t, touches: contactsType(t, T) });
   }
   for (const p in douilles) {
@@ -236,15 +257,15 @@ function corrigerCablage(ex, v, st) {
     c.lamps.push({ id: p, ref: p, nom: lv ? lv.nom : `La lampe du ${PLANCHE.points.find(x => x.id === p).nom}`, a: `l:${p}:L`, b: `l:${p}:N`, PE: `l:${p}:⏚`, L: `l:${p}:L`, Nb: `l:${p}:N` });
   }
   const A = analyser(c);
-  F.push(...constatsFonction(c, A, attenduExercice(ex, v), 'schéma de câblage'));
+  F.push(...constatsFonction(c, A, att, 'schéma de câblage'));
   // douille : neutre sur la languette
-  if (!A.courts.length) for (const l of c.lamps) {
+  if (!A.courts.length) for (const l of c.lamps.filter(x => !x.prise)) {
     const surN = t => A.etats.every(x => x.r.u.find(t) === x.r.N);
     if (surN(l.L) && !surN(l.Nb)) F.push({ g: 'remarque', msg: `${l.nom} : le neutre arrive sur le plot central. Mettez le neutre sur la languette et la phase (retour) sur le plot central.`, fiche: 'app-douille' });
     const terre = base.find(l.PE) === base.find(c.PE);
     if (!terre) F.push({ g: 'erreur', msg: `La terre n'est pas amenée jusqu'au point lumineux de ${l.nom}.`, code: '1214', fiche: 'fils' });
   }
-  if (c.lamps.length && c.lamps.every(l => base.find(l.PE) === base.find(c.PE))) F.push({ g: 'ok', msg: 'La terre est amenée à chaque point lumineux.', code: '1214' });
+  if (c.lamps.some(l => !l.prise) && c.lamps.filter(l => !l.prise).every(l => base.find(l.PE) === base.find(c.PE))) F.push({ g: 'ok', msg: 'La terre est amenée à chaque point lumineux.', code: '1214' });
   // couleurs
   const fonctionNet = k => {
     const n = A.etats.map(x => x.r.u.find(k));
@@ -307,18 +328,28 @@ function corrigerPrincipe(ex, v, st) {
   let nL = 0;
   for (const s of syms) {
     const T = i => `s:${s.id}:${i}`;
-    const idx = { sch1: { L: 0, 1: 1 }, sch2: { L1: 0, 1: 1, L2: 2, 2: 3 }, sch5: { 1: 0, 2: 1, L: 2 }, sch6: { 1: 0, "1'": 1, L: 2 }, sch7: { a: 0, b: 2, c: 3, d: 1 } }[s.type];
+    const idx = { sch1: { L: 0, 1: 1 }, sch2: { L1: 0, 1: 1, L2: 2, 2: 3 }, sch5: { 1: 0, 2: 1, L: 2 }, sch6: { 1: 0, "1'": 1, L: 2 }, sch7: { a: 0, b: 2, c: 3, d: 1 },
+      sch62: { L1: 0, 1: 1, "1'": 2, L2: 3, 2: 4, "2'": 5 }, sch66: { L1: 0, 1: 1, "1'": 2, L2: 3, 2: 4, "2'": 5 } }[s.type];
     if (s.type === 'lampe') c.lamps.push({ id: s.id, nom: `Lampe ${++nL}`, a: T(0), b: T(1) });
     else if (s.type === 'prise') c.prises.push({ id: s.id, L: T(0), N: T(1), PE: T(2) });
     else c.switches.push({ id: s.id, type: s.type, touches: contactsType(s.type, b => T(idx[b])) });
   }
   // correspondance lampes : on associe chaque lampe dessinée à une lampe attendue selon ses interrupteurs
   const attendu = attenduExercice(ex, v);
+  // prises commandées : on repère les prises dessinées qu'un interrupteur commande
+  const nCmdAtt = attendu.lampes.filter(e => e.prise).length;
+  if (nCmdAtt && c.prises.length) {
+    const A0 = analyser(Object.assign({}, c, { lamps: [...c.lamps, ...c.prises.map(p => ({ id: 'pc:' + p.id, a: p.L, b: p.N, prise: true }))] }));
+    const cmdP = c.prises.filter(p => A0.commande.get('pc:' + p.id).size);
+    for (const p of c.prises) if (cmdP.length < nCmdAtt && !cmdP.includes(p)) cmdP.push(p);
+    cmdP.forEach((p, k) => { p.commandee = true; c.lamps.push({ id: 'pc:' + p.id, nom: 'Une prise', a: p.L, b: p.N, prise: true }); });
+  }
   const A = analyser(c);
   const lampesAtt = attendu.lampes.map(e => ({ ...e }));
   for (const l of c.lamps) {
     const types = [...new Set([...A.commande.get(l.id)].map(s => (c.switches.find(x => x.id === s.split('#')[0]) || {}).type))].sort().join();
-    const e = lampesAtt.find(x => !x.pris && [...new Set(x.types)].sort().join() === types) || lampesAtt.find(x => !x.pris);
+    const memeSorte = x => !x.pris && !!x.prise === !!l.prise;
+    const e = lampesAtt.find(x => memeSorte(x) && [...new Set(x.types)].sort().join() === types) || lampesAtt.find(memeSorte);
     if (e) { e.pris = true; l.ref = e.ref; l.nom = e.nom; }
   }
   F.push(...constatsFonction(c, A, attendu, 'schéma de principe'));
@@ -362,7 +393,7 @@ function corrigerUnifilaire(ex, v, st) {
   if (symOk) F.push({ g: 'ok', msg: 'Tous les symboles sont présents.' });
   pts.forEach((p, i) => {
     if (p.items.includes('lampe') && !p.items.some(t => /^sch/.test(t))) F.push({ g: 'remarque', msg: `Point ${i + 1} : le point lumineux n'a pas son interrupteur sur la même branche.` });
-    if (p.items.includes('prise') && p.items.some(t => /^sch/.test(t))) F.push({ g: 'remarque', msg: `Point ${i + 1} : la prise n'est pas commandée par un interrupteur.` });
+    if (p.items.includes('prise') && p.items.some(t => /^sch/.test(t)) && !prisesCommandees(ex).length) F.push({ g: 'remarque', msg: `Point ${i + 1} : la prise n'est pas commandée par un interrupteur.` });
     if (!p.items.length) F.push({ g: 'remarque', msg: `Point ${i + 1} vide.` });
   });
   return F;

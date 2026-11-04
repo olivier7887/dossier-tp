@@ -8,7 +8,7 @@
 // prix HTVA en euros ; verif:true = prix repris d'une ancienne liste ou estimé, à contrôler
 // Références : catalogue général Niko 2026 (gamme Niko Original).
 // Prix bruts HTVA : liste de prix Niko Belgique du 01/06/2024 (Q2 2024)
-const NIKO_PRIX = {"170-01100":4.78,"170-01200":8.92,"170-01500":7.28,"170-01600":5.22,"170-01700":10.58,"170-02600":11.95,"170-33100":6.77,"170-32100":6.77,"11-865":1.77,"31-865":1.77,"11-866":1.77,"31-866":1.77,"100-61100":8.19,"100-61200":12.33,"100-61500":11.74,"100-61600":8.64,"100-61700":14.0,"100-62600":16.4,"100-66600":9.59,"100-66100":9.59,"100-61105":3.43,"100-61505":4.46,"100-66601":2.85,"100-66101":2.85,"100-77100":6.94,"100-77500":9.74,"100-76100":2.53,"100-76800":5.0,"100-76700":8.24,"100-76200":5.0,"100-76300":8.24,"101-61100":7.67,"101-61200":11.81,"101-61500":11.22,"101-61600":8.12,"101-61700":13.48,"101-62600":15.88,"101-66600":9.07,"101-66100":9.07,"101-61105":2.91,"101-61505":3.94,"101-66601":2.33,"101-66101":2.33,"101-77100":5.88,"101-77500":8.25,"101-76100":2.14,"101-76800":4.24,"101-76700":6.98,"101-76200":4.24,"101-76300":6.98,"102-61105":4.1,"102-61505":6.7,"102-66601":4.49,"102-66101":4.49,"102-77100":7.65,"102-77500":9.4,"102-76100":4.1,"102-76800":8.21,"102-76700":13.54,"102-76200":8.21,"102-76300":13.54};
+const NIKO_PRIX = {"170-01100":4.78,"170-01200":8.92,"170-01500":7.28,"170-01600":5.22,"170-01700":10.58,"170-02600":11.95,"170-02200":13.31,"100-62200":16.73,"101-62200":16.21,"170-33100":6.77,"170-32100":6.77,"11-865":1.77,"31-865":1.77,"11-866":1.77,"31-866":1.77,"100-61100":8.19,"100-61200":12.33,"100-61500":11.74,"100-61600":8.64,"100-61700":14.0,"100-62600":16.4,"100-66600":9.59,"100-66100":9.59,"100-61105":3.43,"100-61505":4.46,"100-66601":2.85,"100-66101":2.85,"100-77100":6.94,"100-77500":9.74,"100-76100":2.53,"100-76800":5.0,"100-76700":8.24,"100-76200":5.0,"100-76300":8.24,"101-61100":7.67,"101-61200":11.81,"101-61500":11.22,"101-61600":8.12,"101-61700":13.48,"101-62600":15.88,"101-66600":9.07,"101-66100":9.07,"101-61105":2.91,"101-61505":3.94,"101-66601":2.33,"101-66101":2.33,"101-77100":5.88,"101-77500":8.25,"101-76100":2.14,"101-76800":4.24,"101-76700":6.98,"101-76200":4.24,"101-76300":6.98,"102-61105":4.1,"102-61505":6.7,"102-66601":4.49,"102-66101":4.49,"102-77100":7.65,"102-77500":9.4,"102-76100":4.1,"102-76800":8.21,"102-76700":13.54,"102-76200":8.21,"102-76300":13.54};
 const NIKO_PRIX_SOURCE = 'liste de prix brute Niko Belgique du 01/06/2024';
 const COULEURS_NIKO = [
   { code: '100', nom: 'crème' },
@@ -23,6 +23,7 @@ const NIKO_SOCLES = [
   ['170-01600', 'Socle interrupteur va-et-vient (sch 6), bornes à vis, griffes', 3.00],
   ['170-01700', 'Socle interrupteur permutateur (sch 7), bornes à vis, griffes', 5.60],
   ['170-02600', 'Socle interrupteur va-et-vient double (sch 6+6), bornes à vis, griffes', 6.50],
+  ['170-02200', 'Socle interrupteur va-et-vient bipolaire (sch 6/2), bornes à vis, griffes', 13.31],
   ['170-33100', 'Socle prise 2P+T (28,5 mm), obturateurs, bornes à vis, griffes', 3.90],
   ['170-32100', 'Socle prise 2P+T (21 mm), obturateurs, bornes à vis, griffes', 3.90],
 ];
@@ -34,9 +35,10 @@ const NIKO_COUL = [
   ['61600', 'Interrupteur va-et-vient complet (sch 6), bornes à vis', 4.81, 'Appareils complets', ['100', '101']],
   ['61700', 'Interrupteur permutateur complet (sch 7), bornes à vis', 8.12, 'Appareils complets', ['100', '101']],
   ['62600', 'Interrupteur va-et-vient double complet (sch 6+6), bornes à vis', 9.91, 'Appareils complets', ['100', '101']],
+  ['62200', 'Interrupteur va-et-vient bipolaire complet (sch 6/2), bornes à vis', 16.21, 'Appareils complets', ['100', '101']],
   ['66600', 'Prise 2P+T complète (28,5 mm), obturateurs, bornes à vis', 5.40, 'Appareils complets', ['100', '101']],
   ['66100', 'Prise 2P+T complète (21 mm), obturateurs, bornes à vis', 5.40, 'Appareils complets', ['100', '101']],
-  ['61105', 'Set de finition, touche simple (sch 1, 2, 6, 7)', 1.80, 'Sets de finition', ['100', '101', '102']],
+  ['61105', 'Set de finition, touche simple (sch 1, 2, 6, 6/2, 7)', 1.80, 'Sets de finition', ['100', '101', '102']],
   ['61505', 'Set de finition, touche double (sch 5, 6+6)', 2.50, 'Sets de finition', ['100', '101', '102']],
   ['66601', 'Set de finition prise avec terre (28,5 mm)', 1.48, 'Sets de finition', ['100', '101', '102']],
   ['66101', 'Set de finition prise avec terre (21 mm)', 1.48, 'Sets de finition', ['100', '101', '102']],
@@ -185,6 +187,8 @@ const APPAREILS = {
   sch5:  { nom: 'Interrupteur double allumage', court: 'Sch 5', socle: '170-01500', bornes: [['1', BX[0], BY], ['L', BX[1], BY], ['2', BX[3], BY]], vides: [2] },
   sch6:  { nom: 'Interrupteur va-et-vient', court: 'Sch 6', socle: '170-01600', bornes: [['L', BX[0], BY], ['1', BX[1], BY], ["1'", BX[2], BY]], vides: [3] },
   sch7:  { nom: 'Interrupteur permutateur', court: 'Sch 7', socle: '170-01700', bornes: [['a', BX[0], BY, '✱'], ['b', BX[1], BY, '✱'], ['c', BX[2], BY, '✱'], ['d', BX[3], BY, '✱']], vides: [] },
+  sch62: { nom: 'Interrupteur va-et-vient bipolaire', court: 'Sch 6/2', socle: '170-02200', bornes: [['L1', BX[0], BY], ['1', BX[1], BY], ['2', BX[2], BY], ['L2', BX[3], BY], ["1'", -5, 18.5], ["2'", 5, 18.5]], vides: [] },
+  sch66: { nom: 'Interrupteur va-et-vient double', court: 'Sch 6+6', socle: '170-02600', bornes: [['L1', BX[0], BY], ['1', BX[1], BY], ['2', BX[2], BY], ['L2', BX[3], BY], ["1'", -5, 18.5], ["2'", 5, 18.5]], vides: [] },
   prise: { nom: 'Prise de courant 2P+T', court: 'PC', socle: '170-33100', bornes: [['L', BX[0], BY], ['⏚', 0, BY - 1], ['N', BX[3], BY]], vides: [] },
   douille: { nom: 'Douille E27 sur rosace', court: 'Douille', bornes: [['N', -17, 27], ['L', 0, 27], ['⏚', 17, 27]] },
 };
@@ -235,6 +239,39 @@ const EXERCICES = [
     devices: ['sch6', 'sch6', 'sch1'], lampes: 2, cmd: [[0], [0], [1]], vv: true,
     intro: 'Commander un point lumineux depuis deux endroits, et un second depuis un seul endroit.' },
 ];
+
+/* ---------- charges commandées : lampes et prises ---------- */
+// Dans ex.cmd[i], une charge est un n° de lampe (0, 1, 2) ou 'p' + index de la prise dans ex.devices
+// (prise commandée). Appareils à deux touches (sch 5, sch 6+6) : ex.touches[i] = [[touche 1], [touche 2]].
+const VV_TYPES = ['sch6', 'sch7', 'sch62', 'sch66'];
+const DEUX_TOUCHES = ['sch5', 'sch66'];
+function touchesDe(ex, i) {
+  const t = ex.touches && ex.touches[i];
+  if (t) return [0, 1].slice(0, DEUX_TOUCHES.includes(ex.devices[i]) ? 2 : 1).map(k => (t[k] || []).slice());
+  const c = (ex.cmd && ex.cmd[i]) || [];
+  return DEUX_TOUCHES.includes(ex.devices[i]) ? [0, 1].map(k => c[k] != null ? [c[k]] : []) : [c.slice()];
+}
+function chargesDe(ex, i) { return [...new Set(touchesDe(ex, i).flat())]; }
+function commandePar(ex, charge) { // [[index appareil, touche], …]
+  const r = [];
+  ex.devices.forEach((t, i) => touchesDe(ex, i).forEach((l, k) => { if (l.includes(charge)) r.push([i, k]); }));
+  return r;
+}
+function chargesEx(ex) { return [...Array(ex.lampes || 0).keys(), ...ex.devices.map((t, i) => t === 'prise' ? 'p' + i : null).filter(x => x !== null)]; }
+function prisesCommandees(ex) { return ex.devices.map((t, i) => t === 'prise' && commandePar(ex, 'p' + i).length ? i : null).filter(x => x !== null); }
+// groupes de va-et-vient : appareils (sch 6, 7, 6/2, 6+6) qui commandent ensemble une même charge ; ils doivent être dans des boîtiers différents
+function groupesVV(ex) {
+  const vus = new Set(), out = [];
+  for (const c of chargesEx(ex)) {
+    const g = [...new Set(commandePar(ex, c).map(([i]) => i))].filter(i => VV_TYPES.includes(ex.devices[i]));
+    const k = g.slice().sort().join();
+    if (g.length > 1 && !vus.has(k)) { vus.add(k); out.push(g); }
+  }
+  return out;
+}
+function dispositionOk(ex, positions) {
+  return groupesVV(ex).every(g => new Set(g.map(i => positions[i].split('-')[0])).size === g.length);
+}
 
 /* ---------- Mode opératoire ---------- */
 // f : fiche liée ; prof : étape à faire en présence du professeur
@@ -297,10 +334,23 @@ const FICHES = [
   { id: 'app-sch7', cat: 'Appareils', titre: 'Permutateur (sch 7)', sym: 'sch7',
     html: `<p>Appelé aussi inverseur. Il s'ajoute entre deux va-et-vient pour commander une lampe depuis <strong>trois endroits ou plus</strong>. Il croise les deux navettes.</p>
 <ul><li>Socle Niko 170-01700 : 4 bornes marquées ✱. Les deux bornes extérieures reçoivent les navettes d'un va-et-vient, les deux bornes du milieu repartent vers l'autre va-et-vient.</li></ul>` },
+  { id: 'app-sch62', cat: 'Appareils', titre: 'Va-et-vient bipolaire (sch 6/2)', sym: 'sch62',
+    html: `<p>Un va-et-vient qui coupe <strong>la phase et le neutre</strong> en même temps, avec une seule touche. Deux sch 6/2 commandent une lampe depuis deux endroits, en coupure bipolaire.</p>
+<ul><li>Socle Niko 170-02200 : en haut <b>L1 · 1 · 2 · L2</b>, en bas <b>1' · 2'</b>.</li>
+<li>Pôle 1 : commun L1, navettes 1 et 1'. Pôle 2 : commun L2, navettes 2 et 2'.</li>
+<li>Sur le premier : phase sur L1, neutre sur L2. Les navettes (1-1', 2-2') vont vers le second, qui alimente la lampe par L1 et L2.</li>
+<li>Set de finition : touche simple (1xx-61105).</li></ul>` },
+  { id: 'app-sch66', cat: 'Appareils', titre: 'Va-et-vient double (sch 6+6)', sym: 'sch66',
+    html: `<p>Deux va-et-vient <strong>indépendants</strong> dans un seul appareil, avec deux touches. Idéal en cage d'escalier : un 6+6 en bas commande la lampe du rez et celle de l'étage, chacune avec son propre sch 6.</p>
+<ul><li>Socle Niko 170-02600 : en haut <b>L1 · 1 · 2 · L2</b>, en bas <b>1' · 2'</b>.</li>
+<li>Touche 1 : commun L1, navettes 1 et 1'. Touche 2 : commun L2, navettes 2 et 2'.</li>
+<li>Les deux communs (L1 et L2) reçoivent la phase. Chaque paire de navettes part vers le va-et-vient (sch 6) de sa lampe.</li>
+<li>Set de finition : touche double (1xx-61505).</li></ul>` },
   { id: 'app-prise', cat: 'Appareils', titre: 'Prise de courant 2P+T', sym: 'prise',
     html: `<p>Prise avec contact de terre et sécurité enfants (obligatoire, NBN C 61-112).</p>
 <ul><li>3 bornes : phase, neutre et <b>terre</b> (⏚). La terre est toujours raccordée (code 1218).</li>
-<li>Un circuit de prises se câble en <b>2,5 mm²</b> minimum (code 1806).</li></ul>` },
+<li>Un circuit de prises se câble en <b>2,5 mm²</b> minimum (code 1806).</li>
+<li><b>Prise commandée</b> : une prise peut être commandée par un interrupteur (lampe de chevet, guirlande…). La phase passe alors par l'interrupteur, comme pour une lampe ; le neutre et la terre arrivent directement.</li></ul>` },
   { id: 'app-douille', cat: 'Appareils', titre: 'Douille E27 et rosace', sym: 'lampe',
     html: `<p>La douille (« socket ») est vissée sur la rosace en bois de 95 × 95 mm.</p>
 <ul><li>Le <b>neutre</b> va sur la languette verticale, la <b>phase</b> (le retour) sur le plot central : en changeant l'ampoule, on ne touche pas la phase.</li>

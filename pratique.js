@@ -28,38 +28,49 @@ const DEP_CHAMPS = [
 
 /* ---------- essais générés à partir de l'exercice ---------- */
 const VAL = { cont: 'Continuité (≈ 0 Ω, bip)', ol: 'OL (pas de continuité)', conf: 'Conforme', nonconf: 'Non conforme' };
+// charges commandées (lampes et prises commandées) avec leurs appareils de commande
 function lampesDe(ex, v) {
-  return v.lampes.map((l, j) => {
-    const par = ex.devices.map((t, i) => i).filter(i => (ex.cmd[i] || []).includes(j));
-    return { j, nom: l.nom, court: 'L' + (j + 1), par, vv: par.some(i => ex.devices[i] === 'sch6') };
-  });
+  return chargesEx(ex).map(ch => {
+    const parT = commandePar(ex, ch), par = [...new Set(parT.map(([i]) => i))];
+    const vv = par.length > 1 && par.some(i => VV_TYPES.includes(ex.devices[i]));
+    if (typeof ch === 'string') {
+      const d = v.devices[+ch.slice(1)];
+      return par.length ? { j: ch, nom: 'la prise ' + d.rep, court: d.rep, par, parT, vv, prise: true } : null;
+    }
+    return { j: ch, nom: v.lampes[ch].nom, court: 'L' + (ch + 1), par, parT, vv, prise: false };
+  }).filter(Boolean);
 }
+const majP = s => s.charAt(0).toUpperCase() + s.slice(1);
+function toucheTxt(ex, l, i) { const t = l.parT.find(([x]) => x === i); return DEUX_TOUCHES.includes(ex.devices[i]) && t ? ` (touche ${t[1] + 1})` : ''; }
 function mesuresEssai(ex, v) {
   const R = [], reps = v.devices.map(d => d.rep);
   const lp = lampesDe(ex, v), serie = ex.montage === 'série';
-  const prises = v.devices.filter(d => d.type === 'prise');
-  R.push({ id: 'iso-ln', txt: 'Ampoules retirées, tous les interrupteurs fermés : entre L et N de l\'arrivée', att: 'ol' });
+  const prisesPerm = v.devices.filter((d, i) => d.type === 'prise' && !commandePar(ex, 'p' + i).length);
+  R.push({ id: 'iso-ln', txt: 'Ampoules retirées, rien de branché, tous les interrupteurs fermés : entre L et N de l\'arrivée', att: 'ol' });
   R.push({ id: 'iso-lpe', txt: 'Tous les interrupteurs fermés : entre L et ⏚ de l\'arrivée', att: 'ol' });
-  [...lp.map(l => [l.court, l.nom]), ...prises.map(p => [p.rep, 'la prise ' + p.rep])].forEach(([k, n]) => R.push({ id: 'pe-' + k, txt: `Conducteur de protection : ⏚ de l'arrivée → ⏚ de ${n}`, att: 'ohm', kind: 'ohm' }));
-  if (serie) {
-    const groupe = lp.filter(l => l.par.length);
-    const d = groupe[0] && groupe[0].par[0];
-    if (d != null) R.push({ id: 'serie', txt: `Ampoules en place, ${reps[d]} fermé : entre L et N de l'arrivée, la résistance des ampoules en série est mesurée (pas 0 Ω, pas OL)`, att: 'conf', kind: 'conf' });
-  } else lp.forEach(l => {
-    const sch2 = l.par.find(i => ex.devices[i] === 'sch2');
-    if (sch2 != null) {
-      R.push({ id: 'n-f-' + l.court, txt: `${reps[sch2]} fermé : N de l'arrivée → N de ${l.nom}`, att: 'cont' });
-      R.push({ id: 'n-o-' + l.court, txt: `${reps[sch2]} ouvert : N de l'arrivée → N de ${l.nom}`, att: 'ol' });
-    } else R.push({ id: 'n-' + l.court, txt: `Neutre : N de l'arrivée → N de ${l.nom}`, att: 'cont' });
-    if (!l.par.length) return;
-    if (l.vv) R.push({ id: 'vv-' + l.court, txt: `Basculer ${l.par.map(i => reps[i]).join(', puis ')} : à chaque manœuvre, la continuité L de l'arrivée → L de ${l.nom} s'établit ou se coupe`, att: 'conf', kind: 'conf' });
+  [...v.lampes.map((l, j) => ['L' + (j + 1), l.nom]), ...v.devices.filter(d => d.type === 'prise').map(p => [p.rep, 'la prise ' + p.rep])]
+    .forEach(([k, n]) => R.push({ id: 'pe-' + k, txt: `Conducteur de protection : ⏚ de l'arrivée → ⏚ de ${n}`, att: 'ohm', kind: 'ohm' }));
+  const lampesSerie = serie ? lp.filter(l => !l.prise) : [];
+  if (lampesSerie.length) {
+    const d = lampesSerie[0].par[0];
+    R.push({ id: 'serie', txt: `Ampoules en place, ${reps[d]} fermé : entre L et N de l'arrivée, la résistance des ampoules en série est mesurée (pas 0 Ω, pas OL)`, att: 'conf', kind: 'conf' });
+  }
+  lp.filter(l => !(serie && !l.prise)).forEach(l => {
+    const bip = l.par.find(i => ex.devices[i] === 'sch2');
+    const vvBip = l.vv && l.par.some(i => ex.devices[i] === 'sch62');
+    if (bip != null) {
+      R.push({ id: 'n-f-' + l.court, txt: `${reps[bip]} fermé : N de l'arrivée → N de ${l.nom}`, att: 'cont' });
+      R.push({ id: 'n-o-' + l.court, txt: `${reps[bip]} ouvert : N de l'arrivée → N de ${l.nom}`, att: 'ol' });
+    } else if (vvBip) R.push({ id: 'vvn-' + l.court, txt: `Basculer ${l.par.map(i => reps[i]).join(', puis ')} : la continuité N de l'arrivée → N de ${l.nom} s'établit ou se coupe aussi (coupure bipolaire)`, att: 'conf', kind: 'conf' });
+    else R.push({ id: 'n-' + l.court, txt: `Neutre : N de l'arrivée → N de ${l.nom}`, att: 'cont' });
+    if (l.vv) R.push({ id: 'vv-' + l.court, txt: `Basculer ${l.par.map(i => reps[i] + toucheTxt(ex, l, i)).join(', puis ')} : à chaque manœuvre, la continuité L de l'arrivée → L de ${l.nom} s'établit ou se coupe`, att: 'conf', kind: 'conf' });
     else {
-      const i = l.par[0], t = ex.devices[i] === 'sch5' ? ` (touche ${(ex.cmd[i] || []).indexOf(l.j) + 1})` : '';
+      const i = l.par[0], t = toucheTxt(ex, l, i);
       R.push({ id: 'c-f-' + l.court, txt: `${reps[i]}${t} fermé : L de l'arrivée → L de ${l.nom}`, att: 'cont' });
       R.push({ id: 'c-o-' + l.court, txt: `${reps[i]}${t} ouvert : L de l'arrivée → L de ${l.nom}`, att: 'ol' });
     }
   });
-  prises.forEach(p => {
+  prisesPerm.forEach(p => {
     R.push({ id: 'pl-' + p.rep, txt: `L de l'arrivée → L de la prise ${p.rep}`, att: 'cont' });
     R.push({ id: 'pn-' + p.rep, txt: `N de l'arrivée → N de la prise ${p.rep}`, att: 'cont' });
   });
@@ -68,16 +79,14 @@ function mesuresEssai(ex, v) {
 function testsProf(ex, v) {
   const T = [{ id: 'mesures', txt: 'Mesures hors tension faites et correctes avant la mise sous tension' }], reps = v.devices.map(d => d.rep);
   const lp = lampesDe(ex, v);
-  if (ex.montage === 'série') {
-    const g = lp.filter(l => l.par.length);
-    if (g.length) T.push({ id: 'serie', txt: `${g.map(l => l.court).join(' et ')} s'allument ensemble avec ${reps[g[0].par[0]]} (éclairage plus faible : lampes en série)` });
-  } else lp.forEach(l => {
-    if (!l.par.length) return;
-    if (l.vv) T.push({ id: 'l-' + l.court, txt: `${l.nom} s'allume et s'éteint depuis ${l.par.map(i => reps[i]).join(' et depuis ')}, dans toutes les positions` });
-    else { const i = l.par[0], t = ex.devices[i] === 'sch5' ? ` (touche ${(ex.cmd[i] || []).indexOf(l.j) + 1})` : ''; T.push({ id: 'l-' + l.court, txt: `${l.nom} s'allume et s'éteint avec ${reps[i]}${t}` }); }
+  const serie = ex.montage === 'série' ? lp.filter(l => !l.prise) : [];
+  if (serie.length) T.push({ id: 'serie', txt: `${serie.map(l => l.court).join(' et ')} s'allument ensemble avec ${reps[serie[0].par[0]]} (éclairage plus faible : lampes en série)` });
+  lp.filter(l => !(serie.length && !l.prise)).forEach(l => {
+    const qui = l.vv ? 'depuis ' + l.par.map(i => reps[i] + toucheTxt(ex, l, i)).join(' et depuis ') + ', dans toutes les positions' : 'avec ' + reps[l.par[0]] + toucheTxt(ex, l, l.par[0]);
+    T.push({ id: 'l-' + l.court, txt: l.prise ? `${majP(l.nom)} est alimentée et coupée ${qui} (testeur de prise), terre raccordée` : `${l.nom} s'allume et s'éteint ${qui}` });
   });
-  v.devices.forEach((d, i) => { if (d.type === 'sch2') T.push({ id: 'bip-' + d.rep, txt: `${d.rep} ouvert : plus de tension sur la phase ni sur le neutre de la lampe (VAT)` }); });
-  v.devices.filter(d => d.type === 'prise').forEach(p => T.push({ id: 'pc-' + p.rep, txt: `Prise ${p.rep} : tension L–N ≈ 230 V, terre raccordée (testeur de prise)` }));
+  v.devices.forEach(d => { if (d.type === 'sch2' || d.type === 'sch62') T.push({ id: 'bip-' + d.rep, txt: `${d.rep} en position « éteint » : plus de tension sur la phase ni sur le neutre de la charge (VAT)` }); });
+  v.devices.forEach((p, i) => { if (p.type === 'prise' && !commandePar(ex, 'p' + i).length) T.push({ id: 'pc-' + p.rep, txt: `Prise ${p.rep} : tension L–N ≈ 230 V en permanence, terre raccordée (testeur de prise)` }); });
   T.push({ id: 'disj', txt: 'Pas de déclenchement du disjoncteur ni du différentiel, pas d\'échauffement' });
   return T;
 }

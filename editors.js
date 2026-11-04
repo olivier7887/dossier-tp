@@ -105,14 +105,14 @@ function drawMechanism(g, type, cx, cy, view) {
       S('rect', { x: cx - 24, y: cy - 6, width: 48, height: 16, rx: 2.5, class: 'meca-win' }, f);
       S('rect', { x: cx - 21, y: cy - 3.5, width: 7, height: 11, rx: 2.5, class: 'meca-key' }, f);
       S('rect', { x: cx + 14, y: cy - 3.5, width: 7, height: 11, rx: 2.5, class: 'meca-key' }, f);
-      drawPrincipeSymbol(f, type, cx, cy + 2, 0, 0.18);
+      drawPrincipeSymbol(f, type, cx, cy + 2, 0, SYM_P[type] && SYM_P[type].large ? 0.14 : 0.18);
       S('rect', { x: cx - 8, y: cy + 14, width: 6, height: 9, class: 'meca-win' }, f);
       S('rect', { x: cx + 2, y: cy + 14, width: 6, height: 9, class: 'meca-win' }, f);
     }
     // fenêtres de bornes
     const bx = [-21, -7, 7, 21];
     for (const x of bx) S('rect', { x: cx + x - 5, y: cy - 23.5, width: 10, height: 13, rx: 1, class: 'meca-term' }, f);
-    T(f, cx - 22, cy + 32.5, '10AX 250V~', { class: 'meca-txt' });
+    if (!A.bornes.some(b => b[2] > 0)) T(f, cx - 22, cy + 32.5, '10AX 250V~', { class: 'meca-txt' });
   } else {
     const f = S('g', { class: 'sym-dev' }, g);
     S('rect', { x: cx - 30, y: cy - 28, width: 60, height: 56, rx: 3, class: 'symdev-box' }, f);
@@ -120,7 +120,9 @@ function drawMechanism(g, type, cx, cy, view) {
     T(f, cx + 27, cy + 25, A.court, { class: 'symdev-lbl', 'text-anchor': 'end' });
   }
   for (const [id, bx, by, aff] of A.bornes) {
-    T(g, cx + bx, cy + by - (view === 'reel' ? 8.2 : 4.5), aff || id, { class: 'borne-lbl', 'text-anchor': 'middle' });
+    // bornes du bas (1', 2') : étiquette sous la borne
+    const dy = by > 0 ? (view === 'reel' ? 9.5 : 8.5) : -(view === 'reel' ? 8.2 : 4.5);
+    T(g, cx + bx, cy + by + dy, aff || id, { class: 'borne-lbl', 'text-anchor': 'middle' });
   }
 }
 function drawDouille(g, cx, cy, view) {
@@ -415,7 +417,7 @@ class CablageEditor {
     h.querySelectorAll('[data-color]').forEach(b => b.classList.toggle('on', b.dataset.color === this.color));
     h.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === this.st.view));
     h.querySelectorAll('[data-zoom]').forEach(b => b.classList.toggle('on', b.dataset.zoom === this.zoom));
-    const types = ['sch1', 'sch2', 'sch5', 'sch6', 'sch7', 'prise', 'douille'];
+    const types = ['sch1', 'sch2', 'sch5', 'sch6', 'sch7', 'sch62', 'sch66', 'prise', 'douille'];
     this.palette.hidden = this.mode !== 'placer';
     this.palette.innerHTML = '<span class="palette-lbl">Appareil :</span>' + types.map(t =>
       `<button type="button" class="chip${this.pick === t ? ' on' : ''}" data-type="${t}">${t === 'douille' ? 'Douille E27' : APPAREILS[t].court + ' · ' + APPAREILS[t].nom.replace('Interrupteur ', '')}</button>`).join('');
@@ -564,6 +566,9 @@ const SYM_P = {
   sch5: { terms: [[-15, -30], [15, -30], [0, 30]], nom: 'Interrupteur série' },
   sch6: { terms: [[-12, -30], [12, -30], [0, 30]], nom: 'Va-et-vient' },
   sch7: { terms: [[-12, -30], [12, -30], [-12, 30], [12, 30]], nom: 'Permutateur' },
+  // bornes dans l'ordre : L1, 1, 1', L2, 2, 2'
+  sch62: { terms: [[-16, 30], [-26, -30], [-6, -30], [16, 30], [6, -30], [26, -30]], nom: 'Va-et-vient bipolaire', large: true },
+  sch66: { terms: [[-16, 30], [-26, -30], [-6, -30], [16, 30], [6, -30], [26, -30]], nom: 'Va-et-vient double', large: true },
   lampe: { terms: [[0, -30], [0, 30]], nom: 'Lampe' },
   prise: { terms: [[-10, -30], [10, -30], [0, 30]], nom: 'Prise 2P+T' },
 };
@@ -590,6 +595,10 @@ function drawPrincipeSymbol(parent, type, cx, cy, rot = 0, sc = 1) {
       L(blade(-15, 12, -12)); L(blade(15, 12, -12)); break;
     case 'sch6':
       L('M0 30V12M-12 -30V-12M12 -30V-12'); L('M0 12L-11 -11'); S('circle', { cx: 0, cy: 12, r: 1.8, class: 'sym-dot' }, g); break;
+    case 'sch62': case 'sch66':
+      for (const x of [-16, 16]) { L(`M${x} 30V12M${x - 10} -30V-12M${x + 10} -30V-12`); L(`M${x} 12L${x - 9} -11`); S('circle', { cx: x, cy: 12, r: 1.8, class: 'sym-dot' }, g); }
+      if (type === 'sch62') L('M-20 0H12', { class: 'sym-line dash' });
+      break;
     case 'sch7':
       L('M-12 -30V-12M12 -30V-12M-12 30V12M12 30V12M-12 12V-12M12 12V-12');
       L('M-12 12L12 -12M12 12L-12 -12', { class: 'sym-line dash' }); break;
@@ -632,7 +641,7 @@ class PrincipeEditor {
     pal.innerHTML = '<span class="palette-lbl">Symboles :</span>' + Object.entries(SYM_P).map(([k, v]) =>
       `<button type="button" class="symbtn" data-type="${k}" title="${v.nom}"><svg viewBox="-24 -34 48 68" aria-hidden="true"></svg><span>${v.nom}</span></button>`).join('');
     h.appendChild(pal);
-    pal.querySelectorAll('.symbtn').forEach(b => drawPrincipeSymbol(b.querySelector('svg'), b.dataset.type, 0, 0, 0, 0.9));
+    pal.querySelectorAll('.symbtn').forEach(b => drawPrincipeSymbol(b.querySelector('svg'), b.dataset.type, 0, 0, 0, SYM_P[b.dataset.type].large ? 0.62 : 0.9));
     const wrap = document.createElement('div'); wrap.className = 'svg-wrap paper-wrap';
     this.svg = S('svg', { viewBox: '0 0 800 500', class: 'paper-svg', role: 'img', 'aria-label': 'Schéma de principe' });
     wrap.appendChild(this.svg); h.appendChild(wrap);
@@ -726,7 +735,8 @@ class PrincipeEditor {
     for (const s of this.st.syms) {
       const sel = this.sel && this.sel.k === 'sym' && this.sel.id === s.id;
       const g = S('g', { class: 'sym' + (sel ? ' sel' : ''), 'data-sym': s.id }, svg);
-      S('rect', { x: s.x - 26, y: s.y - 34, width: 52, height: 68, class: 'sym-hit', transform: `rotate(${s.rot} ${s.x} ${s.y})` }, g);
+      const lg = SYM_P[s.type] && SYM_P[s.type].large ? 6 : 0;
+      S('rect', { x: s.x - 26 - lg, y: s.y - 34, width: 52 + 2 * lg, height: 68, class: 'sym-hit', transform: `rotate(${s.rot} ${s.x} ${s.y})` }, g);
       drawPrincipeSymbol(g, s.type, s.x, s.y, s.rot);
       for (const t of this.termsOf(s)) S('circle', { cx: t[0], cy: t[1], r: 2.2, class: 'pterm' }, g);
     }
@@ -849,7 +859,7 @@ class PrincipeEditor {
    ========================================================= */
 const SYM_U = {
   lampe: 'Point lumineux', sch1: 'Interr. simple', sch2: 'Interr. bipolaire', sch5: 'Interr. série',
-  sch6: 'Va-et-vient', sch7: 'Permutateur', prise: 'Prise 2P+T',
+  sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', prise: 'Prise 2P+T',
 };
 function drawUniSymbol(g, type, x, y) {
   // x = début du symbole sur la branche ; renvoie la largeur occupée
@@ -870,10 +880,12 @@ function drawUniSymbol(g, type, x, y) {
     default: {
       S('circle', { cx: x + 5, cy: y, r: 4.5, class: 'u-line', fill: 'var(--paper)' }, g);
       const c = [x + 5, y];
-      if (type === 'sch6' || type === 'sch7') {
+      if (type === 'sch6' || type === 'sch7' || type === 'sch62' || type === 'sch66') {
         L(flag(c[0] + 3, c[1] - 3, c[0] + 15, c[1] - 15));
         L(flag(c[0] - 3, c[1] + 3, c[0] - 15, c[1] + 15));
         if (type === 'sch7') L(`M${c[0] - 6} ${c[1] - 10}L${c[0] + 6} ${c[1] + 10}`);
+        if (type === 'sch62') L(`M${c[0] + 7} ${c[1] - 11}l4 4M${c[0] - 7} ${c[1] + 11}l-4 -4`);
+        if (type === 'sch66') { L(flag(c[0] + 1, c[1] - 4, c[0] + 5, c[1] - 20)); L(flag(c[0] - 1, c[1] + 4, c[0] - 5, c[1] + 20)); }
       } else if (type === 'sch5') {
         L(flag(c[0] + 3, c[1] - 3, c[0] + 15, c[1] - 15));
         L(flag(c[0] + 1, c[1] - 4, c[0] + 5, c[1] - 20));

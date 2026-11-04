@@ -145,20 +145,28 @@ function variante(ex, email) {
   const pls = shuffle(PLANCHE.points.map(p => p.id), r).slice(0, ex.lampes || 0);
   const lampes = pls.map((pl, i) => ({ pl, nom: `Lampe ${i + 1}`, empl: PLANCHE.points.find(p => p.id === pl).nom }));
   let positions;
-  for (let k = 0; k < 50; k++) {
+  for (let k = 0; k < 400; k++) {
     positions = shuffle(PLANCHE.positions.map(p => p.id), r).slice(0, ex.devices.length);
-    if (!ex.vv) break;
-    const els = ex.devices.map((t, i) => t === 'sch6' || t === 'sch7' ? positions[i].split('-')[0] : null).filter(Boolean);
-    if (new Set(els).size === els.length) break;
+    if (dispositionOk(ex, positions)) break;
   }
-  let nS = 0;
+  const nbP = ex.devices.filter(t => t === 'prise').length;
+  let nS = 0, nP = 0;
+  const reps = ex.devices.map(t => t === 'prise' ? (nbP > 1 ? 'PC' + (++nP) : 'PC') : 'S' + (++nS));
+  const nomCharge = c => typeof c === 'string' && c[0] === 'p' ? 'la prise ' + reps[+c.slice(1)] : (lampes[c] && lampes[c].nom);
   const devices = ex.devices.map((type, i) => {
-    const rep = type === 'prise' ? 'PC' : 'S' + (++nS);
     const pos = PLANCHE.positions.find(p => p.id === positions[i]);
-    const cmd = (ex.cmd && ex.cmd[i] || []).map(j => lampes[j] && lampes[j].nom).filter(Boolean);
-    return { type, pos: pos.id, rep, nom: rep, empl: pos.nom, cmd };
+    const touches = touchesDe(ex, i).map(l => l.map(nomCharge).filter(Boolean));
+    const cmd = [...new Set(touches.flat())];
+    const par = type === 'prise' ? commandePar(ex, 'p' + i).map(([j]) => reps[j]) : [];
+    return { type, pos: pos.id, rep: reps[i], nom: reps[i], empl: pos.nom, cmd, touches, par: [...new Set(par)] };
   });
   return { couleur, chantier, alim, lampes, devices };
+}
+// texte « Commande » d'un appareil dans l'énoncé
+function texteCommande(dv) {
+  if (dv.type === 'prise') return dv.par.length ? 'commandée par ' + dv.par.join(' et ') : 'toujours sous tension';
+  if (DEUX_TOUCHES.includes(dv.type)) return dv.touches.map((l, k) => `touche ${k + 1} : ${l.length ? l.join(' et ') : '—'}`).join(' · ');
+  return dv.cmd.length ? maj1(dv.cmd.join(' et ')) : '—';
 }
 
 /* ---------- navigation ---------- */
@@ -553,7 +561,7 @@ function enonceSheet(sheet, ex, v) {
       <div class="table-wrap"><table class="tbl">
         <thead><tr><th>Repère</th><th>Appareil</th><th>Emplacement</th><th>Commande</th></tr></thead>
         <tbody>
-          ${v.devices.map(dv => `<tr><td class="mono">${dv.rep}</td><td>${esc(APPAREILS[dv.type].nom)} (${APPAREILS[dv.type].court})</td><td>${esc(dv.empl)}</td><td>${dv.cmd.length ? esc(dv.cmd.join(' et ')) : '—'}</td></tr>`).join('')}
+          ${v.devices.map(dv => `<tr><td class="mono">${dv.rep}</td><td>${esc(APPAREILS[dv.type].nom)} (${APPAREILS[dv.type].court})</td><td>${esc(dv.empl)}</td><td>${esc(texteCommande(dv))}</td></tr>`).join('')}
           ${v.lampes.map(l => `<tr><td class="mono">${l.nom.replace('Lampe ', 'L')}</td><td>Point lumineux (douille E27 + ampoule LED)</td><td>${esc(l.empl)}</td><td>—</td></tr>`).join('')}
         </tbody></table></div>
       <h3>Plan des emplacements</h3>

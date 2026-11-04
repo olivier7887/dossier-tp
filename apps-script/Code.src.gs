@@ -11,7 +11,7 @@
  *
  * Installation : coller ce code dans Extensions › Apps Script, exécuter « installer » une fois,
  * puis créer les deux déploiements (Déployer › Nouveau déploiement › Application Web).
- * Mise à jour : recoller le code, puis Gérer les déploiements › crayon › Nouvelle version,
+ * Mise à jour : recoller le code, exécuter « installer » (ajoute les onglets et colonnes manquants), puis Gérer les déploiements › crayon › Nouvelle version,
  * pour CHACUN des deux déploiements (les adresses ne changent pas).
  */
 
@@ -21,9 +21,10 @@ const DUREE_CLE_JOURS = 180;
 
 const ONGLETS = {
   profs: { nom: 'Profs', entetes: ['Adresse', 'Nom', 'Remarque'] },
+  classes: { nom: 'Classes', entetes: ['Classe', 'Professeur (adresse)', 'Remarque'] },
   bloques: { nom: 'Bloqués', entetes: ['Adresse', 'Raison', 'Date'] },
-  eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion'] },
-  dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique'] },
+  eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion', 'Professeur'] },
+  dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique', 'Schémas à la main'] },
   catalogue: { nom: 'Catalogue', entetes: ['id', 'Catégorie', 'Description', 'Référence', 'Marque', 'Unité', 'Prix HTVA', 'Couleur', 'Visible', 'À vérifier'] },
 };
 
@@ -43,6 +44,17 @@ function installer() {
   const profs = ss.getSheetByName(ONGLETS.profs.nom);
   const moi = Session.getEffectiveUser().getEmail().toLowerCase();
   if (profs.getLastRow() < 2) profs.appendRow([moi, 'Lesenfants Olivier', 'Propriétaire']);
+  // collègues (adresses construites sur le modèle prénom.nom@elmarche.be : à vérifier)
+  const dejaProfs = lignes_('profs').map(r => String(r[0]).trim().toLowerCase());
+  PROFS_INITIAUX.forEach(([a, n]) => { if (!dejaProfs.includes(a)) profs.appendRow([a, n, 'Adresse à vérifier']); });
+  const cls = ss.getSheetByName(ONGLETS.classes.nom);
+  if (cls.getLastRow() < 2) {
+    const rows = CLASSES_INITIALES.map(([c, p]) => [c, p || moi, '']);
+    cls.getRange(2, 1, rows.length, 3).setValues(rows);
+  }
+  // liste déroulante : le professeur d'une classe est choisi parmi les adresses de l'onglet Profs
+  cls.getRange('B2:B200').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(profs.getRange('A2:A200'), true).setAllowInvalid(false).build());
+  cls.setColumnWidth(1, 160); cls.setColumnWidth(2, 280);
   const cat = ss.getSheetByName(ONGLETS.catalogue.nom);
   if (cat.getLastRow() < 2) {
     const rows = CATALOGUE_INITIAL;
@@ -53,6 +65,7 @@ function installer() {
   }
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('SECRET')) props.setProperty('SECRET', Utilities.getUuid() + Utilities.getUuid());
+  if (!props.getProperty('ANNEE')) props.setProperty('ANNEE', anneeScolaire_(new Date()));
   if (!props.getProperty('DOSSIER_PHOTOS')) props.setProperty('DOSSIER_PHOTOS', DriveApp.createFolder('Dossier TP – photos des élèves').getId());
   const premier = ss.getSheets()[0];
   if (/^(Feuille 1|Sheet1)$/.test(premier.getName()) && premier.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(premier);
@@ -95,9 +108,10 @@ function doPost(e) {
     const u = utilisateur_(email);
     const fn = ACTIONS[q.a];
     if (!fn) throw new Error('Action inconnue.');
+    if (q.an && ECRITURES.includes(q.a) && q.an !== annee_()) { const err = new Error('Une nouvelle année scolaire a commencé : les données de l\'an dernier sont archivées.'); err.annee = annee_(); throw err; }
     rep = { ok: true, data: fn(u, q) };
   } catch (err) {
-    rep = { ok: false, erreur: err.message, auth: !!err.auth };
+    rep = { ok: false, erreur: err.message, auth: !!err.auth, annee: err.annee || '' };
   }
   return ContentService.createTextOutput(JSON.stringify(rep)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -117,7 +131,13 @@ const ACTIONS = {
   reprendre: (u, q) => reprendre_(u, String(q.ex)),
   catMaj: (u, q) => (prof_(u), catMaj_(q.item || {})),
   catSuppr: (u, q) => (prof_(u), catSuppr_(String(q.id))),
+  joindre: (u, q) => joindre_(u, String(q.ex), String(q.partie), String(q.fichier || ''), String(q.nom || '')),
+  retirer: (u, q) => retirer_(u, String(q.ex), String(q.partie)),
+  profAffecter: (u, q) => (prof_(u), profAffecter_(String(q.email).toLowerCase(), String(q.classe || ''), String(q.prof || '').toLowerCase())),
+  profNouvelleAnnee: (u, q) => (admin_(u), nouvelleAnnee_(String(q.confirmation || ''))),
 };
+// actions refusées si l'app de l'élève date d'une année scolaire archivée
+const ECRITURES = ['sauverDossier', 'remettre', 'joindre', 'retirer', 'reprendre', 'profil'];
 
 /* =========================================================
    Clé signée (HMAC-SHA256)
@@ -165,23 +185,29 @@ function utilisateur_(email) {
   return { email, role: 'eleve' };
 }
 function prof_(u) { if (u.role !== 'prof') throw new Error('Réservé aux professeurs.'); }
+function estAdmin_(email) { return lignes_('profs').some(r => String(r[0]).trim().toLowerCase() === email && /propri|admin/i.test(String(r[2]))); }
+function admin_(u) { prof_(u); if (!estAdmin_(u.email)) throw new Error('Réservé au propriétaire de l\'app (onglet Profs, remarque « Propriétaire »).'); }
+function anneeScolaire_(d) { const y = d.getFullYear(); return d.getMonth() >= 7 ? y + '-' + (y + 1) : (y - 1) + '-' + y; }
+function annee_() { return PropertiesService.getScriptProperties().getProperty('ANNEE') || anneeScolaire_(new Date()); }
+function listeProfs_() { return lignes_('profs').filter(r => String(r[0]).trim()).map(r => ({ email: String(r[0]).trim().toLowerCase(), nom: String(r[1] || '').trim() || nomDepuisEmail_(String(r[0]).trim().toLowerCase()).nom })); }
+function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).trim()).map(r => ({ classe: String(r[0]).trim(), prof: String(r[1] || '').trim().toLowerCase() })); }
 
 /* =========================================================
    Élève
    ========================================================= */
 function moi_(u) {
-  const res = { email: u.email, role: u.role, catalogue: lireCatalogue_(u.role) };
-  if (u.role === 'prof') { const n = nomDepuisEmail_(u.email); res.profil = { prenom: n.prenom, nom: n.nom, classe: '', confirme: true }; return res; }
+  const res = { email: u.email, role: u.role, catalogue: lireCatalogue_(u.role), annee: annee_(), classes: listeClasses_(), profs: listeProfs_() };
+  if (u.role === 'prof') { const n = nomDepuisEmail_(u.email); res.profil = { prenom: n.prenom, nom: n.nom, classe: '', confirme: true }; res.admin = estAdmin_(u.email); return res; }
   // (les élèves reçoivent aussi l'état de correction de chaque TP)
   return verrou_(() => {
     const sh = onglet_('eleves'), rows = lignes_('eleves'), now = new Date();
     let i = rows.findIndex(r => String(r[0]).toLowerCase() === u.email);
     if (i < 0) {
-      const n = nomDepuisEmail_(u.email), row = [u.email, n.prenom, n.nom, '3Pélec', false, false, '', '', '', now, now];
+      const n = nomDepuisEmail_(u.email), row = [u.email, n.prenom, n.nom, '', false, false, '', '', '', now, now, ''];
       sh.appendRow(row); rows.push(row); i = rows.length - 1;
     } else sh.getRange(i + 2, 11).setValue(now);
     const r = rows[i];
-    res.profil = { prenom: r[1], nom: r[2], classe: r[3], confirme: r[4] === true };
+    res.profil = { prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), confirme: r[4] === true };
     res.planche = { validee: r[5] === true, lignes: json_(r[6], []) };
     res.resume = {};
     lignes_('dossiers').forEach(d => { if (String(d[0]).toLowerCase() === u.email) res.resume[d[1]] = { maj: d[3] ? new Date(d[3]).getTime() : 0, remis: d[4] === true, corrige: d[9] === true, remises: Number(d[10]) || 0 }; });
@@ -193,7 +219,12 @@ function sauverProfil_(u, p) {
   return verrou_(() => {
     const rows = lignes_('eleves'), i = rows.findIndex(r => String(r[0]).toLowerCase() === u.email);
     if (i < 0) throw new Error('Profil introuvable.');
-    onglet_('eleves').getRange(i + 2, 2, 1, 4).setValues([[String(p.prenom || '').slice(0, 60), String(p.nom || '').slice(0, 60), String(p.classe || '').slice(0, 20), true]]);
+    const classe = String(p.classe || '').trim().slice(0, 30), prof = String(p.prof || '').trim().toLowerCase();
+    const classes = listeClasses_();
+    if (classes.length && !classes.some(c => c.classe === classe)) throw new Error('Choisissez votre classe dans la liste.');
+    if (prof && !listeProfs_().some(x => x.email === prof)) throw new Error('Choisissez votre professeur dans la liste.');
+    onglet_('eleves').getRange(i + 2, 2, 1, 4).setValues([[String(p.prenom || '').slice(0, 60), String(p.nom || '').slice(0, 60), classe, true]]);
+    onglet_('eleves').getRange(i + 2, 12).setValue(prof);
     return true;
   });
 }
@@ -208,9 +239,10 @@ function lireDossier_(u, ex) {
   d.remis = r[4] === true; d.photoId = r[6] || ''; d.remises = Number(r[10]) || 0;
   d.correction = r[9] === true ? json_(r[8], null) : null;
   d.historique = json_(r[11], []);
+  d.mains = json_(r[12], {});
   return d;
 }
-const CHAMPS_SERVEUR = ['remis', 'photoId', 'remises', 'correction', 'historique'];
+const CHAMPS_SERVEUR = ['remis', 'photoId', 'remises', 'correction', 'historique', 'mains'];
 function nettoyer_(json) { const d = json_(json, {}) || {}; CHAMPS_SERVEUR.forEach(k => delete d[k]); return JSON.stringify(d); }
 function sauverDossier_(u, ex, json) {
   if (u.role !== 'eleve') return true;
@@ -219,7 +251,7 @@ function sauverDossier_(u, ex, json) {
   return verrou_(() => {
     const sh = onglet_('dossiers'), { rows, i } = ligneDossier_(u.email, ex);
     if (i >= 0 && rows[i][4] === true) throw new Error('Ce dossier a déjà été remis : il ne peut plus être modifié.');
-    if (i < 0) sh.appendRow([u.email, ex, json, new Date(), false, '', '', '', '', false, 0, '']);
+    if (i < 0) sh.appendRow([u.email, ex, json, new Date(), false, '', '', '', '', false, 0, '', '']);
     else sh.getRange(i + 2, 3, 1, 2).setValues([[json, new Date()]]);
     return true;
   });
@@ -240,12 +272,53 @@ function remettre_(u, ex, json, photo) {
   }
   return verrou_(() => {
     const sh = onglet_('dossiers'), { rows, i } = ligneDossier_(u.email, ex), now = new Date();
-    if (i < 0) { sh.appendRow([u.email, ex, json, now, true, now, photoId, lien, '', false, 1, '']); return { remis: true, photoId, remises: 1 }; }
+    if (i < 0) { sh.appendRow([u.email, ex, json, now, true, now, photoId, lien, '', false, 1, '', '']); return { remis: true, photoId, remises: 1 }; }
     if (rows[i][4] === true) throw new Error('Ce dossier a déjà été remis.');
     const n = (Number(rows[i][10]) || 0) + 1;
     sh.getRange(i + 2, 3, 1, 6).setValues([[json, now, true, now, photoId || rows[i][6], lien || rows[i][7]]]);
     sh.getRange(i + 2, 11).setValue(n);
     return { remis: true, photoId, remises: n };
+  });
+}
+
+/* ---------- schémas faits à la main (facultatifs) ---------- */
+const PARTIES_MAIN = { principe: 'principe', unifilaire: 'unifilaire', cablage: 'câblage', position: 'position' };
+function dossierPhotos_() { return DriveApp.getFolderById(PropertiesService.getScriptProperties().getProperty('DOSSIER_PHOTOS')); }
+function joindre_(u, ex, partie, fichier, nomOrig) {
+  if (u.role !== 'eleve') throw new Error('Seuls les élèves joignent un schéma.');
+  if (!PARTIES_MAIN[partie]) throw new Error('Partie inconnue.');
+  const m = fichier.match(/^data:(image\/[\w.+-]+|application\/pdf);base64,(.+)$/);
+  if (!m) throw new Error('Envoyez une photo (JPG, PNG) ou un PDF.');
+  if (m[2].length > 14e6) throw new Error('Fichier trop lourd (10 Mo au maximum).');
+  const avant = ligneDossier_(u.email, ex);
+  if (avant.i >= 0 && avant.rows[avant.i][4] === true) throw new Error('Ce dossier est remis : il ne peut plus être modifié.');
+  const n = nomDepuisEmail_(u.email), ext = m[1] === 'application/pdf' ? 'pdf' : (m[1].split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const nomFichier = `${n.nom} ${n.prenom} – TP ${ex} – schéma de ${PARTIES_MAIN[partie]} (à la main) – ${Utilities.formatDate(new Date(), 'Europe/Brussels', 'yyyy-MM-dd HH.mm')}.${ext}`;
+  const f = dossierPhotos_().createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], nomFichier));
+  return verrou_(() => {
+    const sh = onglet_('dossiers'), { rows, i } = ligneDossier_(u.email, ex);
+    let mains = {};
+    if (i < 0) sh.appendRow([u.email, ex, '{}', new Date(), false, '', '', '', '', false, 0, '', '']);
+    else mains = json_(rows[i][12], {}) || {};
+    const ancien = mains[partie];
+    if (ancien && ancien.id) { try { DriveApp.getFileById(ancien.id).setTrashed(true); } catch (e) { /* déjà supprimé */ } }
+    mains[partie] = { id: f.getId(), type: m[1], nom: nomOrig.slice(0, 80) || nomFichier, le: Date.now() };
+    const j = i < 0 ? ligneDossier_(u.email, ex).i : i;
+    sh.getRange(j + 2, 13).setValue(JSON.stringify(mains));
+    return mains;
+  });
+}
+function retirer_(u, ex, partie) {
+  if (u.role !== 'eleve') throw new Error('Réservé aux élèves.');
+  return verrou_(() => {
+    const { rows, i } = ligneDossier_(u.email, ex);
+    if (i < 0) return {};
+    if (rows[i][4] === true) throw new Error('Ce dossier est remis : il ne peut plus être modifié.');
+    const mains = json_(rows[i][12], {}) || {};
+    if (mains[partie] && mains[partie].id) { try { DriveApp.getFileById(mains[partie].id).setTrashed(true); } catch (e) { /* déjà supprimé */ } }
+    delete mains[partie];
+    onglet_('dossiers').getRange(i + 2, 13).setValue(JSON.stringify(mains));
+    return mains;
   });
 }
 
@@ -274,7 +347,7 @@ function profEleves_() {
   return lignes_('eleves').map(r => {
     const email = String(r[0]).toLowerCase(), ex = {};
     dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 }; });
-    return { email, prenom: r[1], nom: r[2], classe: r[3], planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
+    return { email, prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
   }).sort((a, b) => (String(a.classe) + ' ' + a.nom + ' ' + a.prenom).localeCompare(String(b.classe) + ' ' + b.nom + ' ' + b.prenom));
 }
 function profDossier_(email, ex) {
@@ -288,6 +361,7 @@ function profDossier_(email, ex) {
     publiee: i >= 0 && rows[i][9] === true,
     remises: i >= 0 ? Number(rows[i][10]) || 0 : 0,
     historique: i >= 0 ? json_(rows[i][11], []) : [],
+    mains: i >= 0 ? json_(rows[i][12], {}) || {} : {},
     profil: el ? { prenom: el[1], nom: el[2], classe: el[3] } : null,
     planche: el ? { validee: el[5] === true, lignes: json_(el[6], []) } : { validee: false, lignes: [] },
   };
@@ -296,6 +370,44 @@ function profPhoto_(id) {
   const b = DriveApp.getFileById(id).getBlob();
   return 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes());
 }
+function profAffecter_(email, classe, prof) {
+  if (classe && listeClasses_().length && !listeClasses_().some(c => c.classe === classe)) throw new Error('Classe inconnue : ajoutez-la d\'abord dans l\'onglet Classes.');
+  if (prof && !listeProfs_().some(x => x.email === prof)) throw new Error('Professeur inconnu : ajoutez-le d\'abord dans l\'onglet Profs.');
+  return verrou_(() => {
+    const rows = lignes_('eleves'), i = rows.findIndex(r => String(r[0]).toLowerCase() === email);
+    if (i < 0) throw new Error('Élève introuvable.');
+    onglet_('eleves').getRange(i + 2, 4).setValue(classe);
+    onglet_('eleves').getRange(i + 2, 12).setValue(prof);
+    return true;
+  });
+}
+
+/* ---------- nouvelle année scolaire ---------- */
+function nouvelleAnnee_(confirmation) {
+  const annee = annee_();
+  if (confirmation.trim() !== annee) throw new Error(`Pour confirmer, tapez exactement : ${annee}`);
+  return verrou_(() => {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const props = PropertiesService.getScriptProperties();
+    // 1. archive : copie complète du tableur + photos de l'année, rangées dans un dossier Drive
+    const dossier = DriveApp.createFolder('Dossier TP – archive ' + annee);
+    const copie = ss.copy('Dossier TP – données ' + annee + ' (archive)');
+    DriveApp.getFileById(copie.getId()).moveTo(dossier);
+    try { const ph = dossierPhotos_(); ph.setName('Photos des élèves ' + annee); ph.moveTo(dossier); } catch (e) { /* dossier photos introuvable */ }
+    props.setProperty('DOSSIER_PHOTOS', DriveApp.createFolder('Dossier TP – photos des élèves').getId());
+    // 2. remise à zéro (Profs, Classes et Catalogue sont gardés)
+    ['eleves', 'dossiers', 'bloques'].forEach(k => {
+      const sh = onglet_(k), n = sh.getLastRow();
+      if (n >= 2) sh.getRange(2, 1, n - 1, sh.getMaxColumns()).clearContent();
+    });
+    // 3. année suivante
+    const [a, b] = annee.split('-').map(Number);
+    const suivante = (a + 1) + '-' + (b + 1);
+    props.setProperty('ANNEE', suivante);
+    return { annee: suivante, archive: copie.getUrl(), dossier: dossier.getUrl() };
+  });
+}
+
 function profValiderPlanche_(u, email, lignes) {
   return verrou_(() => {
     const rows = lignes_('eleves'), i = rows.findIndex(r => String(r[0]).toLowerCase() === email);
@@ -359,4 +471,18 @@ function catSuppr_(id) {
    Catalogue de départ (copié dans l'onglet Catalogue par « installer »)
    Prix Niko : liste de prix brute Niko Belgique du 01/06/2024.
    ========================================================= */
+const PROFS_INITIAUX = [
+  ['philippe.dachelet@elmarche.be', 'Dachelet Philippe'],
+  ['gregory.baudson@elmarche.be', 'Baudson Grégory'],
+  ['logan.degossly@elmarche.be', 'Degossly Logan'],
+];
+// [classe, adresse du professeur] (vide = propriétaire)
+const CLASSES_INITIALES = [
+  ['3P Élec', ''],
+  ['3QEM groupe 1', ''],
+  ['3QEM groupe 2', ''],
+  ['3QEM groupe 3', 'gregory.baudson@elmarche.be'],
+  ['3P Poly', 'logan.degossly@elmarche.be'],
+];
+
 const CATALOGUE_INITIAL = __CATALOGUE__;

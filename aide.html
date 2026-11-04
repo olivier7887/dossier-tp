@@ -152,7 +152,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
       <li><div><p>Une page Google s'ouvre et affiche « Bonjour … ! » avec votre adresse. Cliquez sur <span class="ui-btn">Ouvrir Dossier TP</span>.</p>
         <p class="lead">Si l'adresse affichée n'est pas celle de l'école, changez de compte Google et recommencez.</p></div></li>
       <li><div><p>Revenez dans l'app. Si elle n'a pas changé toute seule, fermez-la et rouvrez-la.</p></div></li>
-      <li><div><p>La première fois, vérifiez votre <b>prénom</b>, votre <b>nom</b> et votre <b>classe</b> (une adresse n'a pas d'accents : corrigez-les), puis cliquez sur <span class="ui-btn">Confirmer</span>. Ils apparaîtront en haut de toutes vos feuilles.</p></div></li>
+      <li><div><p>La première fois, vérifiez votre <b>prénom</b> et votre <b>nom</b> (une adresse n'a pas d'accents : corrigez-les), choisissez votre <b>classe</b> et votre <b>professeur</b> dans les listes, puis cliquez sur <span class="ui-btn">Confirmer</span>. Ils apparaîtront en haut de toutes vos feuilles.</p></div></li>
     </ol>
     <p class="note">La connexion est gardée <b>180 jours</b>, même sans internet. N'utilisez pas l'app avec le compte d'un autre élève : tout ce que vous faites est enregistré à votre nom.</p>
   </section>
@@ -167,6 +167,7 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
       <div><dt>Unifilaire</dt><dd>Choisissez le disjoncteur et la canalisation, puis ajoutez les points raccordés : le schéma se dessine tout seul.</dd></div>
       <div><dt>Câblage</dt><dd>Placez les appareils sur la planche, puis tirez les fils d'une borne à l'autre. Dans la boîte de dérivation, chaque point noir est une borne Wago. « Zoom boîte » agrandit la boîte.</dd></div>
       <div><dt>Bon de commande</dt><dd>Ajoutez le matériel depuis le catalogue, réglez les quantités, choisissez le taux de TVA et expliquez pourquoi. Le matériel de la planche, validé au TP 0, est repris d'office.</dd></div>
+      <div><dt>Schéma à la main</dt><dd>Facultatif : sous chaque schéma, « Joindre une photo ou un PDF » envoie votre schéma dessiné sur papier, à la latte. Le schéma dans l'app reste obligatoire.</dd></div>
       <div><dt>Outillage</dt><dd>Cochez les outils nécessaires pour le TP.</dd></div>
       <div><dt>Remise</dt><dd>Vérifiez que tout est complet, ajoutez la photo de votre montage et remettez le dossier.</dd></div>
     </dl>
@@ -218,11 +219,13 @@ footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--lin
     <h2>Pour les professeurs</h2>
     <p class="lead">Connectez-vous avec votre adresse <b>prénom.nom@elmarche.be</b>. Votre adresse doit figurer dans l'onglet <b>Profs</b> du Google Sheet « Dossier TP – données ».</p>
     <ul class="plain">
-      <li><b>Mes élèves</b> : un tableau avec chaque élève et l'état de chaque TP (en cours, remis). Cliquez sur une case pour ouvrir son dossier et sa photo. Ce que vous y modifiez n'est pas enregistré.</li>
+      <li><b>Mes élèves</b> : un tableau avec vos élèves et l'état de chaque TP (en cours, à corriger, corrigé). « Tous les élèves » montre aussi ceux des collègues ; la liste Classe filtre. Cliquez sur une case pour ouvrir son dossier, sa photo et ses schémas faits à la main. Le crayon ✎ change sa classe ou son professeur.</li>
+      <li><b>Classes et professeurs</b> : réglés dans les onglets <b>Classes</b> (classe et professeur titulaire) et <b>Profs</b> du Google Sheet. L'élève choisit sa classe, l'app lui propose le bon professeur.</li>
       <li><b>Valider la planche</b> : dans le dossier TP 0 d'un élève, feuille Bon de commande, cliquez sur « Valider cette liste ». Ce matériel sera repris d'office dans ses bons de commande suivants.</li>
       <li><b>Rendre un dossier</b> : dans la feuille Remise d'un dossier remis, « Rendre le dossier à l'élève » lui permet de le corriger.</li>
       <li><b>Catalogue</b> : modifiez les prix, ajoutez un article ou cachez-le aux élèves. Les changements partent dans l'onglet Catalogue et s'appliquent chez tous.</li>
       <li><b>Ajouter un collègue</b> : son adresse dans l'onglet <b>Profs</b>. <b>Bloquer un élève</b> : son adresse dans l'onglet <b>Bloqués</b>.</li>
+      <li><b>Nouvelle année scolaire</b> (propriétaire de l'app) : en bas de la page d'accueil, archive l'année dans votre Drive et remet les élèves et les dossiers à zéro. Le catalogue, les profs et les classes sont gardés.</li>
       <li><b>Aperçu</b> : « Exercices » montre un TP tel que le voit un élève, sans rien enregistrer.</li>
     </ul>
     <p class="note prof">Les photos des élèves sont rangées dans le dossier Drive « Dossier TP – photos des élèves », et chaque dossier dans l'onglet <b>Dossiers</b> du Google Sheet.</p>

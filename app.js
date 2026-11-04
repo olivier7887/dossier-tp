@@ -7,6 +7,10 @@ const CFG = window.TP_CONFIG || {};
 const ONLINE = !!(CFG.apiUrl && CFG.loginUrl);
 const DOMAINE = 'elmarche.be';
 const PROFS_DEMO = ['olivier.lesenfants@elmarche.be'];
+const LISTES_DEMO = {
+  classes: [['3P Élec', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 1', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 2', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 3', 'gregory.baudson@elmarche.be'], ['3P Poly', 'logan.degossly@elmarche.be']].map(([classe, prof]) => ({ classe, prof })),
+  profs: [['olivier.lesenfants@elmarche.be', 'Lesenfants Olivier'], ['philippe.dachelet@elmarche.be', 'Dachelet Philippe'], ['gregory.baudson@elmarche.be', 'Baudson Grégory'], ['logan.degossly@elmarche.be', 'Degossly Logan']].map(([email, nom]) => ({ email, nom })),
+};
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const eur = n => (Math.round(n * 100) / 100).toLocaleString('fr-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -20,6 +24,16 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* stockage indisponible : on garde en mémoire */ } },
 };
+
+/* ---------- classes et professeurs (onglets Classes et Profs du Google Sheet) ---------- */
+let LISTES = ONLINE ? store.get('tp3pelec:listes', { classes: [], profs: [] }) : LISTES_DEMO;
+const nomProf = em => { const p = LISTES.profs.find(x => x.email === em); return p ? p.nom : (em ? nameFromEmail(em).nom + ' ' + nameFromEmail(em).prenom : ''); };
+const profDeClasse = c => (LISTES.classes.find(x => x.classe === c) || {}).prof || '';
+function profilIncomplet() {
+  if (!DATA.profil.confirme) return true;
+  if (!LISTES.classes.length) return false;
+  return !LISTES.classes.some(c => c.classe === DATA.profil.classe) || (LISTES.profs.length > 0 && !DATA.profil.prof);
+}
 
 /* ---------- utilisateur ---------- */
 function cap(s) { return s.split('-').map(p => p ? p[0].toUpperCase() + p.slice(1) : p).join('-'); }
@@ -48,10 +62,10 @@ let CLE = null;
 async function api(a, params = {}) {
   let r;
   try {
-    r = await fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ a, cle: CLE }, params)) });
+    r = await fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ a, cle: CLE, an: (DATA && DATA.annee) || undefined }, params)) });
   } catch (e) { const err = new Error('Pas de connexion internet.'); err.reseau = true; throw err; }
   let j; try { j = await r.json(); } catch (e) { throw new Error('Réponse illisible du serveur.'); }
-  if (!j.ok) { const err = new Error(j.erreur || 'Erreur du serveur.'); err.auth = !!j.auth; throw err; }
+  if (!j.ok) { const err = new Error(j.erreur || 'Erreur du serveur.'); err.auth = !!j.auth; err.annee = j.annee || ''; throw err; }
   return j.data;
 }
 function lireCle(cle) {
@@ -68,7 +82,7 @@ function setSync(etat, msg = '') {
 let USER = null, DATA = null;
 function loadUser(u) {
   USER = u;
-  DATA = store.get('tp3pelec:' + u.email, null) || { profil: { prenom: u.prenom, nom: u.nom, classe: '3Pélec', confirme: false }, ex: {}, planche: { validee: false, lignes: [] } };
+  DATA = store.get('tp3pelec:' + u.email, null) || { profil: { prenom: u.prenom, nom: u.nom, classe: '', prof: '', confirme: false }, ex: {}, planche: { validee: false, lignes: [] } };
   store.set('tp3pelec:session', u.email);
 }
 function persist() { if (USER) store.set('tp3pelec:' + USER.email, DATA); }
@@ -102,7 +116,7 @@ async function flushDirty() {
     }
     persist(); setSync('ok');
   } catch (e) {
-    if (e.reseau) setSync('hors'); else if (e.auth) deconnecter(e.message); else setSync('err', e.message);
+    if (e.reseau) setSync('hors'); else if (e.auth) deconnecter(e.message); else if (e.annee) setTimeout(rafraichir, 0); else setSync('err', e.message);
   } finally { flushing = false; }
   if (Object.keys(DATA.dirty || {}).length && enLigne() && SYNC.etat === 'ok') setTimeout(flushDirty, 500);
 }
@@ -155,7 +169,7 @@ function render() {
   app.innerHTML = topBar() + '<main id="main" class="wrap"></main>' + footer();
   bindTop();
   const main = $('#main');
-  if (USER.role === 'eleve' && !DATA.profil.confirme) return profilView(main);
+  if (USER.role === 'eleve' && (profilIncomplet() || VIEW.page === 'profil')) return profilView(main);
   if (VIEW.page === 'ex') return exView(main);
   if (VIEW.page === 'apprendre') return apprendreView(main);
   if (VIEW.page === 'catalogue') return catalogueView(main);
@@ -227,18 +241,26 @@ function bindLogin() {
   document.querySelectorAll('[data-demo]').forEach(b => b.addEventListener('click', () => tryLogin(b.dataset.demo)));
 }
 function profilView(main) {
+  const p = DATA.profil, deja = p.confirme, listes = LISTES.classes.length > 0;
+  const profSel = p.prof || profDeClasse(p.classe);
+  const classes = LISTES.classes.map(c => c.classe);
   main.innerHTML = `<section class="card narrow">
-    <h1>Bienvenue</h1>
-    <p>Votre nom a été lu dans votre adresse e-mail. Une adresse n'a pas d'accents : corrigez si besoin, puis confirmez. Il apparaîtra sur toutes vos feuilles.</p>
+    <h1>${deja ? 'Ma classe' : 'Bienvenue'}</h1>
+    <p>${deja ? 'Choisissez votre classe et votre professeur dans les listes, puis confirmez.' : "Votre nom a été lu dans votre adresse e-mail. Une adresse n'a pas d'accents : corrigez si besoin. Choisissez ensuite votre classe et votre professeur, puis confirmez. Votre nom apparaîtra sur toutes vos feuilles."}</p>
     <form id="pf" class="form-grid">
-      <label>Prénom <input id="pf-prenom" required value="${esc(DATA.profil.prenom)}"></label>
-      <label>Nom <input id="pf-nom" required value="${esc(DATA.profil.nom)}"></label>
-      <label>Classe <input id="pf-classe" value="${esc(DATA.profil.classe)}"></label>
-      <div><button class="btn primary" type="submit">Confirmer</button></div>
+      <label>Prénom <input id="pf-prenom" required value="${esc(p.prenom)}"></label>
+      <label>Nom <input id="pf-nom" required value="${esc(p.nom)}"></label>
+      ${listes ? `<label>Classe <select id="pf-classe" required><option value="">Choisir ma classe…</option>${classes.map(c => `<option ${c === p.classe ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+      <label>Professeur <select id="pf-prof" ${LISTES.profs.length ? 'required' : ''}><option value="">Choisir mon professeur…</option>${LISTES.profs.map(x => `<option value="${esc(x.email)}" ${x.email === profSel ? 'selected' : ''}>${esc(x.nom)}</option>`).join('')}</select></label>`
+        : `<label>Classe <input id="pf-classe" value="${esc(p.classe)}"></label>`}
+      <div class="row wrapr"><button class="btn primary" type="submit">Confirmer</button>${deja && !profilIncomplet() ? '<button type="button" class="btn ghost" id="pf-annul">Annuler</button>' : ''}</div>
     </form></section>`;
+  const sc = $('#pf-classe'), sp = $('#pf-prof');
+  if (sp) sc.addEventListener('change', () => { const d = profDeClasse(sc.value); if (d && LISTES.profs.some(x => x.email === d)) sp.value = d; });
+  const an = $('#pf-annul'); if (an) an.addEventListener('click', () => go({ page: 'home' }));
   $('#pf').addEventListener('submit', e => {
     e.preventDefault();
-    Object.assign(DATA.profil, { prenom: $('#pf-prenom').value.trim(), nom: $('#pf-nom').value.trim(), classe: $('#pf-classe').value.trim(), confirme: true });
+    Object.assign(DATA.profil, { prenom: $('#pf-prenom').value.trim(), nom: $('#pf-nom').value.trim(), classe: sc.value.trim(), prof: sp ? sp.value : (p.prof || ''), confirme: true });
     if (ONLINE) { DATA.profilDirty = true; persist(); flushProfil(); } else save();
     go({ page: 'home' });
   });
@@ -293,6 +315,8 @@ function homeEleve(main) {
       <h1>Mes travaux pratiques</h1>
       <p>Chaque TP contient l'énoncé, le mode opératoire, les schémas, le bon de commande et la liste d'outillage. Votre version de l'exercice est personnelle : emplacements et finitions changent d'un élève à l'autre.</p>
     </section>
+    <p class="ma-classe muted">Classe : <b>${esc(DATA.profil.classe || '—')}</b>${DATA.profil.prof ? ` · Professeur : <b>${esc(nomProf(DATA.profil.prof))}</b>` : ''} · <button type="button" class="as-link" id="chg-classe">Modifier</button></p>
+    ${DATA.msgAnnee ? `<p class="notice">Nouvelle année scolaire ${esc(DATA.annee || '')} : vos dossiers de l'an dernier ont été archivés par le professeur. Vous repartez d'une page blanche.</p>` : ''}
     ${planche ? '' : `<p class="notice">Commencez par le <b>TP 0</b> : la liste du matériel de la planche, une fois validée par le professeur, sera reprise d'office dans les bons de commande suivants.</p>`}
     <ol class="ex-list">${EXERCICES.map(ex => {
       const e = etatEx(ex);
@@ -302,6 +326,8 @@ function homeEleve(main) {
         <span class="state ${e.cls}">${e.lbl}</span></button></li>`;
     }).join('')}</ol>`;
   main.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => go({ page: 'ex', id: b.dataset.ex, tab: 'enonce' })));
+  $('#chg-classe').addEventListener('click', () => go({ page: 'profil' }));
+  if (DATA.msgAnnee) { DATA.msgAnnee = false; persist(); }
 }
 
 /* ---------- exercice ---------- */
@@ -378,10 +404,10 @@ function exView(main) {
   ({
     enonce: () => enonceSheet(sheet, ex, v),
     mode: () => modeSheet(sheet, ex, d),
-    principe: () => { sheet.innerHTML = sheetHead('Schéma de principe', 'Dessinez le circuit entre L1 et N. Le disjoncteur bipolaire et la terre sont déjà imprimés.', 'sch-principe') + '<div id="ed"></div>'; EDITOR = new PrincipeEditor($('#ed'), d.principe, { onChange }); bindFiches(sheet); },
-    unifilaire: () => { sheet.innerHTML = sheetHead('Schéma unifilaire', 'Complétez la protection, la canalisation et les points raccordés. Le schéma se dessine à droite, comme dans Trikker.', 'sch-unifilaire') + '<div id="ed"></div>'; EDITOR = new UnifilaireEditor($('#ed'), d.unifilaire, { onChange }); bindFiches(sheet); },
-    cablage: () => { sheet.innerHTML = sheetHead('Schéma de câblage', 'Placez les appareils aux emplacements de l\'énoncé, posez les douilles, puis tirez chaque fil. Dans la boîte, chaque point noir correspond à une borne Wago.', 'sch-cablage') + '<div id="ed"></div>'; EDITOR = new CablageEditor($('#ed'), d.cablage, { onChange }); bindFiches(sheet); },
-    position: () => { sheet.innerHTML = sheetHead('Schéma de position', 'Planche vue de face, cotes en mm. Reportez ces cotes au crayon sur la planche avant de fixer quoi que ce soit.', 'sch-position') + '<div class="svg-wrap paper-wrap" id="pos"></div>'; renderPosition($('#pos')); bindFiches(sheet); },
+    principe: () => { sheet.innerHTML = sheetHead('Schéma de principe', 'Dessinez le circuit entre L1 et N. Le disjoncteur bipolaire et la terre sont déjà imprimés.', 'sch-principe') + '<div id="ed"></div>'; EDITOR = new PrincipeEditor($('#ed'), d.principe, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'principe'); },
+    unifilaire: () => { sheet.innerHTML = sheetHead('Schéma unifilaire', 'Complétez la protection, la canalisation et les points raccordés. Le schéma se dessine à droite, comme dans Trikker.', 'sch-unifilaire') + '<div id="ed"></div>'; EDITOR = new UnifilaireEditor($('#ed'), d.unifilaire, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'unifilaire'); },
+    cablage: () => { sheet.innerHTML = sheetHead('Schéma de câblage', 'Placez les appareils aux emplacements de l\'énoncé, posez les douilles, puis tirez chaque fil. Dans la boîte, chaque point noir correspond à une borne Wago.', 'sch-cablage') + '<div id="ed"></div>'; EDITOR = new CablageEditor($('#ed'), d.cablage, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'cablage'); },
+    position: () => { sheet.innerHTML = sheetHead('Schéma de position', 'Planche vue de face, cotes en mm. Reportez ces cotes au crayon sur la planche avant de fixer quoi que ce soit.', 'sch-position') + '<div class="svg-wrap paper-wrap" id="pos"></div>'; renderPosition($('#pos')); bindFiches(sheet); mainBox(sheet, ex, d, 'position'); },
     bdc: () => bdcSheet(sheet, ex, v, d),
     outils: () => outilsSheet(sheet, ex, d),
     remise: () => remiseSheet(sheet, ex, d),
@@ -696,6 +722,7 @@ function remiseSheet(sheet, ex, d) {
   const remis = prof ? PV.remis : !!d.remis;
   sheet.innerHTML = `${sheetHead('Remise du dossier', prof ? 'État du dossier de l\'élève et photo de son montage.' : 'Vérifiez que chaque partie est complète, ajoutez la photo de votre planche, puis remettez le dossier.')}
     <ul class="parts">${parts.map(([n, ok]) => `<li class="${ok ? 'ok' : ''}"><span class="dot" aria-hidden="true"></span>${n}<span class="state ${ok ? 'ok' : ''}">${ok ? 'Complété' : 'À faire'}</span></li>`).join('')}</ul>
+    ${resumeMains(ex, prof ? PV.mains : d.mains)}
     <div class="photo-box">
       <h3>Photo de la planche</h3>
       ${prof ? '' : `<p class="muted">Sur smartphone, le bouton ouvre l'appareil photo. Cadrez toute la planche, de face, bien éclairée.</p>
@@ -746,6 +773,112 @@ function remiseSheet(sheet, ex, d) {
 }
 const PHOTOS = {};
 
+/* ---------- schémas faits à la main (photo ou PDF, facultatif) ---------- */
+const PARTIES_MAIN = { principe: 'Schéma de principe', unifilaire: 'Schéma unifilaire', cablage: 'Schéma de câblage', position: 'Schéma de position' };
+const COURT_MAIN = { principe: 'principe', unifilaire: 'unifilaire', cablage: 'câblage', position: 'position' };
+const MAIN_PREV = {};
+const dateCourte = t => t ? new Date(t).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit' }) + ' à ' + new Date(t).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }) : '';
+function resumeMains(ex, mains) {
+  mains = mains || {};
+  const pm = ex.kind === 'planche' ? ['position'] : ['principe', 'unifilaire', 'cablage'];
+  return `<p class="muted small mains-resume">Schémas faits à la main (facultatif) : ${pm.map(k => `${COURT_MAIN[k]} ${mains[k] ? '<b class="ok-txt">✓</b>' : '—'}`).join(' · ')}</p>`;
+}
+function htmlMainsProf(mains) {
+  const ks = Object.keys(mains || {}).filter(k => PARTIES_MAIN[k]);
+  if (!ks.length) return '';
+  return `<div class="mains-corr"><h3>Schémas faits à la main</h3><p class="muted small">Ils ne sont pas corrigés automatiquement : tenez-en compte dans la grille, par exemple en « Communication ».</p>
+    <div class="row wrapr">${ks.map(k => `<button type="button" class="btn small" data-voir-main="${k}">${PARTIES_MAIN[k]}</button>`).join('')}</div></div>`;
+}
+function bindVoirMains(root, mains) {
+  root.querySelectorAll('[data-voir-main]').forEach(b => b.addEventListener('click', async () => {
+    const k = b.dataset.voirMain, m = (mains || {})[k]; if (!m) return;
+    if (m.data) return voirFichier(PARTIES_MAIN[k], m, m.data);
+    const t = b.textContent; b.disabled = true; b.textContent = 'Chargement…';
+    try { voirFichier(PARTIES_MAIN[k], m, await api('profPhoto', { id: m.id })); }
+    catch (e) { alertMsg(e.message); }
+    finally { b.disabled = false; b.textContent = t; }
+  }));
+}
+function alertMsg(t) { const dlg = $('#dlg'); dlg.innerHTML = `<div class="dlg-in"><div class="dlg-head"><h2>Oups</h2><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div><p>${esc(t)}</p></div>`; dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close()); dlg.showModal(); }
+function voirFichier(titre, m, url) {
+  const dlg = $('#dlg');
+  let href = url;
+  if (/^data:application\/pdf/.test(url)) {
+    const bin = atob(url.split(',')[1]), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    href = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+  }
+  const pdf = /pdf/.test(m.type || url.slice(0, 30));
+  dlg.innerHTML = `<div class="dlg-in voir-main"><div class="dlg-head"><div><span class="eyebrow">Fait à la main</span><h2>${esc(titre)}</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
+    ${pdf ? `<iframe src="${href}" title="${esc(titre)}"></iframe>` : `<img src="${href}" alt="${esc(titre)} fait à la main">`}
+    <p class="row wrapr"><span class="muted small">${esc(m.nom || '')} · ${dateCourte(m.le)}</span><a class="btn small" href="${href}" download="${esc(m.nom || 'schema')}" target="_blank" rel="noopener">${pdf ? 'Ouvrir le PDF' : 'Télécharger'}</a></p></div>`;
+  dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => { if (href !== url) URL.revokeObjectURL(href); }, { once: true });
+  dlg.showModal();
+}
+function fichierVersDataUrl(f) {
+  return new Promise((res, rej) => {
+    if (f.type === 'application/pdf') {
+      if (f.size > 10e6) return rej(new Error('PDF trop lourd (10 Mo au maximum).'));
+      const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('Fichier illisible.')); r.readAsDataURL(f); return;
+    }
+    if (!/^image\//.test(f.type)) return rej(new Error('Envoyez une photo (JPG, PNG) ou un PDF.'));
+    const img = new Image(), u = URL.createObjectURL(f);
+    img.onload = () => {
+      const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Image illisible : envoyez-la en JPG ou en PDF.')); };
+    img.src = u;
+  });
+}
+function mainBox(sheet, ex, d, partie) {
+  let box = sheet.querySelector('.main-box');
+  if (!box) { box = document.createElement('div'); box.className = 'main-box'; sheet.appendChild(box); }
+  const redraw = () => mainBox(sheet, ex, d, partie);
+  const titre = `<h3>${PARTIES_MAIN[partie]} fait à la main <span class="pill">facultatif</span></h3>`;
+  if (USER.role === 'prof') {
+    if (!CTX.eleve) { box.innerHTML = `${titre}<p class="muted">L'élève peut joindre ici une photo ou un PDF de son schéma dessiné sur papier.</p>`; return; }
+    const m = (PV.mains || {})[partie];
+    box.innerHTML = `${titre}${m ? `<p class="main-file"><span class="state ok">Joint</span> ${esc(m.nom)} <span class="muted small">${dateCourte(m.le)}</span> <button type="button" class="btn small" data-voir-main="${partie}">Voir</button></p>` : '<p class="muted">Pas de schéma fait à la main pour cette feuille.</p>'}`;
+    bindVoirMains(box, PV.mains); return;
+  }
+  const m = (d.mains || {})[partie], remis = !!d.remis, key = ex.id + '|' + partie;
+  const prev = m && (m.data || MAIN_PREV[key]);
+  box.innerHTML = `${titre}
+    <p class="muted">Vous avez aussi dessiné ce schéma sur papier, à la latte ? Prenez-le en photo, bien à plat et de face, ou joignez un scan en PDF. Le schéma dans l'app reste obligatoire.</p>
+    ${m ? `<div class="main-file">${prev && !/pdf/.test(m.type) ? `<img src="${prev}" alt="Aperçu du schéma fait à la main">` : '<span class="main-ico" aria-hidden="true">PDF</span>'}
+      <div><span class="state ok">Joint</span> ${esc(m.nom)}<br><span class="muted small">Envoyé le ${dateCourte(m.le)}</span></div></div>` : ''}
+    ${remis ? '' : `<div class="row wrapr"><label class="btn ${m ? '' : 'primary'}" for="main-in">${m ? 'Remplacer' : 'Joindre une photo ou un PDF'}</label>
+      <input id="main-in" type="file" accept="image/*,application/pdf" class="sr">${m ? '<button type="button" class="btn ghost" id="main-del">Retirer</button>' : ''}</div>`}
+    <p id="main-msg" class="muted small" role="status"></p>`;
+  const msg = t => { const el = box.querySelector('#main-msg'); if (el) el.textContent = t; };
+  const inp = box.querySelector('#main-in');
+  if (inp) inp.addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (ONLINE && !enLigne()) return msg('Il faut une connexion internet pour envoyer le fichier.');
+    msg('Préparation…');
+    try {
+      const url = await fichierVersDataUrl(f), type = url.slice(5, url.indexOf(';'));
+      if (!ONLINE) { (d.mains ||= {})[partie] = { nom: f.name, type, le: Date.now(), data: url }; persist(); return redraw(); }
+      msg('Envoi…');
+      d.mains = await api('joindre', { ex: ex.id, partie, fichier: url, nom: f.name });
+      if (!/pdf/.test(type)) MAIN_PREV[key] = url;
+      persist(); redraw();
+    } catch (err) { msg(err.message); if (err.auth) deconnecter(err.message); }
+  });
+  const del = box.querySelector('#main-del');
+  if (del) del.addEventListener('click', async () => {
+    if (!ONLINE) { delete d.mains[partie]; persist(); return redraw(); }
+    if (!enLigne()) return msg('Il faut une connexion internet.');
+    del.disabled = true; msg('Suppression…');
+    try { d.mains = await api('retirer', { ex: ex.id, partie }); delete MAIN_PREV[key]; persist(); redraw(); }
+    catch (err) { del.disabled = false; msg(err.message); }
+  });
+}
+
 /* ---------- correction (V2) ---------- */
 const ORDRE_G = { erreur: 0, remarque: 1, ok: 2 };
 function htmlParties(parties, ouvert) {
@@ -780,6 +913,7 @@ function correctionSheet(sheet, ex, v, d) {
       <p class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span>' : '<span class="state cur">Pas encore remis</span>'}
         <span class="state">${PV.remises >= 2 ? 'Seconde remise' : PV.remises === 1 ? 'Première remise' : 'Aucune remise'}</span>
         ${saved ? (PV.publiee ? '<span class="state ok">Correction publiée</span>' : '<span class="state todo">Brouillon enregistré</span>') : ''}</p>
+      ${htmlMainsProf(PV.mains)}
       ${h0 && h0.correction ? `<details class="corr-hist"><summary>Correction de la première remise : ${num(totalGrille(h0.correction.grille || {}).tot)} points</summary>${htmlParties(h0.correction.parties || [])}</details>` : ''}
       <div class="corr-grid">
         <div class="corr-side">
@@ -805,7 +939,7 @@ function correctionSheet(sheet, ex, v, d) {
     };
     $('#g-save').addEventListener('click', () => envoyer(false));
     $('#g-pub').addEventListener('click', () => envoyer(true));
-    bindFiches(sheet);
+    bindFiches(sheet); bindVoirMains(sheet, PV.mains);
     return;
   }
   if (prof) {
@@ -868,43 +1002,139 @@ function apprendreView(main) {
 }
 
 /* ---------- accueil professeur ---------- */
-let ELEVES = null, FILTRE_ELEVES = '';
+let ELEVES = null, FILTRE_ELEVES = '', FILTRE_CLASSE = '';
+let VUE_ELEVES = store.get('tp3pelec:vue-eleves', null);
+const profEleve = e => e.prof || profDeClasse(e.classe);
+const estMonEleve = e => profEleve(e) === USER.email;
+function vueEleves() {
+  if (VUE_ELEVES) return VUE_ELEVES;
+  return LISTES.classes.some(c => c.prof === USER.email) || (ELEVES || []).some(estMonEleve) ? 'mes' : 'tous';
+}
+function classesConnues() { return [...new Set([...LISTES.classes.map(c => c.classe), ...(ELEVES || []).map(e => e.classe).filter(Boolean)])]; }
 function profHome(main) {
   main.innerHTML = `
-    ${ONLINE ? `<section class="hello"><h1>Mes élèves</h1><p>Cliquez sur une case pour ouvrir le dossier d'un élève : schémas, bon de commande, photo. Sur le bon de commande du TP 0, vous validez le matériel de la planche.</p></section>
-    <div class="row between wrapr"><label class="inline">Rechercher <input id="el-q" type="search" value="${esc(FILTRE_ELEVES)}" placeholder="Nom, classe…"></label>
-      <button type="button" class="btn ghost small" id="el-maj">Actualiser</button></div>
+    ${ONLINE ? `<section class="hello"><h1>Élèves</h1><p>Cliquez sur une case pour ouvrir le dossier d'un élève : schémas, bon de commande, photo. Sur le bon de commande du TP 0, vous validez le matériel de la planche.</p></section>
+    <div class="el-bar">
+      <div class="chips" role="group" aria-label="Élèves affichés"><button type="button" class="chip" data-vue="mes">Mes élèves</button><button type="button" class="chip" data-vue="tous">Tous les élèves</button></div>
+      <label class="inline">Classe <select id="el-classe"></select></label>
+      <label class="inline">Rechercher <input id="el-q" type="search" value="${esc(FILTRE_ELEVES)}" placeholder="Nom, adresse…"></label>
+      <button type="button" class="btn ghost small" id="el-maj">Actualiser</button>
+    </div>
+    <p class="muted small" id="el-compte"></p>
     <div id="eleves" class="table-wrap"><p class="empty">Chargement de la liste…</p></div>` : ''}
     <section class="hello"><h2>Exercices</h2>
       <p>Ouvrez un exercice pour voir ce que voit un élève. Chaque élève reçoit sa propre variante (emplacements, couleur des finitions, type de chantier pour la TVA), calculée à partir de son adresse.</p></section>
     <ol class="ex-list">${EXERCICES.map(ex => `<li><button type="button" class="ex-card" data-ex="${ex.id}">
       <span class="ex-num">TP ${ex.num}</span><span class="ex-main"><span class="ex-title">${esc(ex.titre)}</span><span class="ex-sub">${esc(ex.court)}</span></span><span class="state">Aperçu</span></button></li>`).join('')}</ol>
+    ${ONLINE && DATA.admin ? `<section class="card zone-annee">
+      <h2>Nouvelle année scolaire</h2>
+      <p>Année en cours dans l'app : <b>${esc(DATA.annee || '')}</b>. En fin d'année, ce bouton archive tout (copie du tableur et photos, dans un dossier Drive « Dossier TP – archive ${esc(DATA.annee || '')} »), puis vide la liste des élèves et leurs dossiers. Le catalogue, les profs et les classes sont gardés : mettez-les à jour ensuite dans le Google Sheet.</p>
+      <div><button type="button" class="btn" id="na-open">Démarrer une nouvelle année…</button></div>
+    </section>` : ''}
     <section class="card next">
       <h2>Prochaines étapes</h2>
       <ul>
-        <li><b>V2</b> : création d'exercices par glisser-déposer, correction automatique détaillée (avec codes Vinçotte), retour à l'élève.</li>
-        <li><b>V3</b> : photo annotée par le prof, validation pratique par essai et grille de dépannage, évaluation /215.</li>
+        <li>Création de nouveaux exercices par glisser-déposer.</li>
+        <li><b>V3</b> : photo annotée par le prof, validation pratique par essai et grille de dépannage.</li>
       </ul>
     </section>`;
   main.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => go({ page: 'ex', id: b.dataset.ex, tab: 'enonce' })));
+  const na = $('#na-open'); if (na) na.addEventListener('click', openNouvelleAnnee);
   if (!ONLINE) return;
+  const majFiltres = () => {
+    const vue = vueEleves();
+    main.querySelectorAll('[data-vue]').forEach(b => { b.classList.toggle('on', b.dataset.vue === vue); b.setAttribute('aria-pressed', b.dataset.vue === vue); });
+    const cls = classesConnues().filter(c => vue === 'tous' || LISTES.classes.some(x => x.classe === c && x.prof === USER.email) || (ELEVES || []).some(e => e.classe === c && estMonEleve(e)));
+    if (FILTRE_CLASSE && !cls.includes(FILTRE_CLASSE)) FILTRE_CLASSE = '';
+    $('#el-classe').innerHTML = `<option value="">Toutes</option>${cls.map(c => `<option ${c === FILTRE_CLASSE ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+  };
   const draw = () => {
     const box = $('#eleves'); if (!box) return;
-    const q = FILTRE_ELEVES.trim().toLowerCase();
-    const list = (ELEVES || []).filter(e => !q || `${e.nom} ${e.prenom} ${e.classe} ${e.email}`.toLowerCase().includes(q));
+    majFiltres();
     if (!ELEVES) return;
-    if (!list.length) { box.innerHTML = `<p class="empty">${ELEVES.length ? 'Aucun élève ne correspond.' : 'Aucun élève ne s\'est encore connecté.'}</p>`; return; }
+    const q = FILTRE_ELEVES.trim().toLowerCase(), vue = vueEleves();
+    const list = ELEVES.filter(e => (vue === 'tous' || estMonEleve(e)) && (!FILTRE_CLASSE || e.classe === FILTRE_CLASSE) && (!q || `${e.nom} ${e.prenom} ${e.classe} ${e.email}`.toLowerCase().includes(q)));
+    $('#el-compte').textContent = list.length ? `${list.length} élève${list.length > 1 ? 's' : ''}${vue === 'mes' ? ' dans vos classes' : ''}` : '';
+    if (!list.length) {
+      box.innerHTML = `<p class="empty">${!ELEVES.length ? 'Aucun élève ne s\'est encore connecté.' : vue === 'mes' && !q && !FILTRE_CLASSE ? 'Aucun de vos élèves ne s\'est encore connecté. <button type="button" class="as-link" data-vue="tous">Voir tous les élèves</button>' : 'Aucun élève ne correspond.'}</p>`;
+      box.querySelectorAll('[data-vue]').forEach(b => b.addEventListener('click', () => choisirVue(b.dataset.vue)));
+      return;
+    }
     box.innerHTML = `<table class="tbl eleves"><thead><tr><th>Élève</th><th>Classe</th><th class="c">Planche</th>${EXERCICES.map(x => `<th class="c">TP ${x.num}</th>`).join('')}</tr></thead>
-      <tbody>${list.map(e => `<tr><td><b>${esc(e.nom)}</b> ${esc(e.prenom)}<span class="muted small mail">${esc(e.email)}</span></td><td>${esc(e.classe)}</td>
+      <tbody>${list.map(e => `<tr><td><b>${esc(e.nom)}</b> ${esc(e.prenom)}<span class="muted small mail">${esc(e.email)}</span></td>
+        <td><span class="cl-cell"><span>${esc(e.classe || '—')}<span class="muted small mail">${esc(nomProf(profEleve(e)) || 'sans professeur')}</span></span><button type="button" class="ibtn small-i" data-aff="${esc(e.email)}" title="Changer la classe ou le professeur" aria-label="Changer la classe ou le professeur de ${esc(e.prenom)} ${esc(e.nom)}">✎</button></span></td>
         <td class="c">${e.planche ? '<span class="state ok">validée</span>' : '<span class="muted">—</span>'}</td>
         ${EXERCICES.map(x => { const st = e.ex[x.id]; const lbl = st ? (st.corrige && st.remis ? 'corrigé' : st.remis ? 'à corriger' : 'en cours') : '—'; const cls = st ? (st.corrige && st.remis ? 'ok' : st.remis ? 'todo' : 'cur') : '';
           return `<td class="c"><button type="button" class="cell-btn state ${cls}" data-el="${esc(e.email)}" data-x="${x.id}" data-remis="${st && st.remis ? 1 : 0}" title="TP ${x.num} – ${esc(e.prenom)} ${esc(e.nom)}">${lbl}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
     box.querySelectorAll('[data-el]').forEach(b => b.addEventListener('click', () => { PV = null; go({ page: 'ex', id: b.dataset.x, tab: b.dataset.remis === '1' ? 'correction' : 'enonce', eleve: b.dataset.el }); }));
+    box.querySelectorAll('[data-aff]').forEach(b => b.addEventListener('click', () => openAffecter(ELEVES.find(e => e.email === b.dataset.aff), draw)));
   };
+  const choisirVue = v => { VUE_ELEVES = v; store.set('tp3pelec:vue-eleves', v); draw(); };
   const charger = () => api('profEleves').then(r => { ELEVES = r; draw(); }).catch(e => { const box = $('#eleves'); if (box) box.innerHTML = `<p class="err">${esc(e.message)}</p>`; if (e.auth) deconnecter(e.message); });
+  main.querySelectorAll('.el-bar [data-vue]').forEach(b => b.addEventListener('click', () => choisirVue(b.dataset.vue)));
+  $('#el-classe').addEventListener('change', e => { FILTRE_CLASSE = e.target.value; draw(); });
   $('#el-q').addEventListener('input', e => { FILTRE_ELEVES = e.target.value; draw(); });
   $('#el-maj').addEventListener('click', () => { ELEVES = null; $('#eleves').innerHTML = '<p class="empty">Chargement de la liste…</p>'; charger(); });
-  if (ELEVES) draw(); else charger();
+  if (ELEVES) draw(); else { majFiltres(); charger(); }
+}
+function openAffecter(e, redraw) {
+  if (!e) return;
+  const dlg = $('#dlg');
+  const classes = [...new Set([...LISTES.classes.map(c => c.classe), e.classe].filter(Boolean))];
+  const pr = profEleve(e);
+  dlg.innerHTML = `<div class="dlg-in dlg-petit"><div class="dlg-head"><div><span class="eyebrow">Classe et professeur</span><h2>${esc(e.prenom)} ${esc(e.nom)}</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
+    <form id="af" class="form-grid">
+      <label>Classe <select id="af-c"><option value="">—</option>${classes.map(c => `<option ${c === e.classe ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+      <label>Professeur <select id="af-p"><option value="">—</option>${LISTES.profs.map(x => `<option value="${esc(x.email)}" ${x.email === pr ? 'selected' : ''}>${esc(x.nom)}</option>`).join('')}</select></label>
+      <p class="muted small">Une classe ou un professeur manque ? Ajoutez-le dans l'onglet Classes ou Profs du Google Sheet, puis actualisez l'app.</p>
+      <p id="af-msg" class="err" role="status"></p>
+      <div class="row wrapr"><button type="submit" class="btn primary">Enregistrer</button><button type="button" class="btn ghost" data-close>Annuler</button></div>
+    </form></div>`;
+  dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+  const sc = $('#af-c', dlg), sp = $('#af-p', dlg);
+  sc.addEventListener('change', () => { const d = profDeClasse(sc.value); if (d) sp.value = d; });
+  $('#af', dlg).addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const btn = dlg.querySelector('[type=submit]'); btn.disabled = true;
+    try {
+      await api('profAffecter', { email: e.email, classe: sc.value, prof: sp.value });
+      e.classe = sc.value; e.prof = sp.value; dlg.close(); redraw();
+    } catch (err) { btn.disabled = false; $('#af-msg', dlg).textContent = err.message; }
+  });
+  dlg.showModal();
+}
+function openNouvelleAnnee() {
+  const dlg = $('#dlg'), an = DATA.annee || '';
+  dlg.innerHTML = `<div class="dlg-in dlg-petit"><div class="dlg-head"><div><span class="eyebrow">Fin d'année</span><h2>Nouvelle année scolaire</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
+    <div id="na-corps">
+    <ol class="na-etapes">
+      <li><b>Archive</b> : une copie complète du Google Sheet et le dossier des photos sont rangés dans « Dossier TP – archive ${esc(an)} », dans votre Drive.</li>
+      <li><b>Remise à zéro</b> : la liste des élèves, leurs dossiers, corrections et photos repartent à vide. Les élèves bloqués aussi.</li>
+      <li><b>Gardé</b> : le catalogue (avec vos prix), les profs et les classes.</li>
+    </ol>
+    <p>Les élèves gardent l'app et le même lien : à leur prochaine connexion, elle repart à zéro et leur redemande leur classe.</p>
+    <form id="na-f" class="form-grid">
+      <label><span>Pour confirmer, tapez <b class="mono">${esc(an)}</b></span><input id="na-c" autocomplete="off" inputmode="numeric"></label>
+      <p id="na-msg" class="err" role="status"></p>
+      <div class="row wrapr"><button type="submit" class="btn danger" id="na-go" disabled>Archiver et remettre à zéro</button><button type="button" class="btn ghost" data-close>Annuler</button></div>
+    </form></div></div>`;
+  dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+  const inp = $('#na-c', dlg), goB = $('#na-go', dlg);
+  inp.addEventListener('input', () => { goB.disabled = inp.value.trim() !== an; });
+  $('#na-f', dlg).addEventListener('submit', async ev => {
+    ev.preventDefault();
+    goB.disabled = true; goB.textContent = 'Archivage en cours…'; $('#na-msg', dlg).textContent = '';
+    try {
+      const r = await api('profNouvelleAnnee', { confirmation: inp.value.trim() });
+      DATA.annee = r.annee; persist(); ELEVES = null; PV = null;
+      $('#na-corps', dlg).innerHTML = `<p class="state ok">C'est fait : l'app est passée à l'année ${esc(r.annee)}.</p>
+        <p>L'archive de ${esc(an)} est dans votre Drive : <a href="${esc(r.dossier)}" target="_blank" rel="noopener">ouvrir le dossier d'archive</a>.</p>
+        <p>Pensez maintenant à mettre à jour les onglets <b>Classes</b> et <b>Profs</b> du Google Sheet pour la nouvelle année.</p>
+        <div><button type="button" class="btn primary" data-close>Fermer</button></div>`;
+      dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { dlg.close(); go({ page: 'home' }); }));
+    } catch (err) { goB.disabled = false; goB.textContent = 'Archiver et remettre à zéro'; $('#na-msg', dlg).textContent = err.message; }
+  });
+  dlg.showModal(); inp.focus();
 }
 
 /* ---------- démarrage ---------- */
@@ -912,11 +1142,23 @@ async function flushProfil() {
   if (!ONLINE || !DATA || !DATA.profilDirty || !enLigne()) return;
   try { await api('profil', { profil: DATA.profil }); DATA.profilDirty = false; persist(); } catch (e) { /* réessai plus tard */ }
 }
+function nouvelleAnneeLocale() {
+  // le prof a archivé l'année : on repart à zéro sur cet appareil (la connexion est gardée)
+  DATA = { profil: { prenom: USER.prenom, nom: USER.nom, classe: '', prof: '', confirme: USER.role !== 'eleve' }, ex: {}, planche: { validee: false, lignes: [] }, resume: {}, dirty: {}, msgAnnee: USER.role === 'eleve' };
+  [FETCHED, SCRATCH, PHOTOS, MAIN_PREV].forEach(o => Object.keys(o).forEach(k => delete o[k]));
+  ELEVES = null; PV = null; if (VIEW.page === 'ex') VIEW = { page: 'home' };
+}
 async function rafraichir() {
   if (!USER || !enLigne()) { if (USER) setSync('hors'); return; }
   try {
     const r = await api('moi');
     USER.role = r.role;
+    if (Array.isArray(r.classes)) { LISTES = { classes: r.classes, profs: r.profs || [] }; store.set('tp3pelec:listes', LISTES); }
+    if (r.annee) {
+      if (DATA.annee && DATA.annee !== r.annee) nouvelleAnneeLocale();
+      DATA.annee = r.annee;
+    }
+    DATA.admin = !!r.admin;
     if (r.role === 'eleve') {
       const garde = DATA.profilDirty ? DATA.profil : null;
       DATA.profil = garde || r.profil;
@@ -926,7 +1168,7 @@ async function rafraichir() {
     if (Array.isArray(r.catalogue) && r.catalogue.length) { CATALOGUE.splice(0, CATALOGUE.length, ...r.catalogue); store.set('tp3pelec:cat-cache', r.catalogue); }
     persist(); setSync('ok');
     await flushProfil(); await flushDirty();
-    if (VIEW.page !== 'ex' && !document.querySelector('dialog[open]') && !(document.activeElement && /input|textarea|select/i.test(document.activeElement.tagName))) render();
+    if (VIEW.page !== 'ex' && VIEW.page !== 'profil' && !document.querySelector('dialog[open]') && !(document.activeElement && /input|textarea|select/i.test(document.activeElement.tagName))) render();
   } catch (e) {
     if (e.auth) deconnecter(e.message); else if (e.reseau) setSync('hors'); else setSync('err', e.message);
   }
@@ -937,7 +1179,7 @@ function demarrerEnLigne() {
   if (!p || !p.e || Date.now() > p.x) { if (CLE) LOGIN_MSG = 'Votre connexion a expiré : reconnectez-vous.'; CLE = null; USER = null; render(); return; }
   const n = nameFromEmail(p.e);
   USER = { email: p.e, role: p.r, prenom: n.prenom, nom: n.nom };
-  DATA = store.get('tp3pelec:' + p.e, null) || { profil: { prenom: n.prenom, nom: n.nom, classe: '3Pélec', confirme: p.r !== 'eleve' }, ex: {}, planche: { validee: false, lignes: [] }, resume: {}, dirty: {} };
+  DATA = store.get('tp3pelec:' + p.e, null) || { profil: { prenom: n.prenom, nom: n.nom, classe: '', prof: '', confirme: p.r !== 'eleve' }, ex: {}, planche: { validee: false, lignes: [] }, resume: {}, dirty: {} };
   const cat = store.get('tp3pelec:cat-cache', null);
   if (Array.isArray(cat) && cat.length) CATALOGUE.splice(0, CATALOGUE.length, ...cat);
   VIEW = { page: 'home' }; render();

@@ -33,7 +33,9 @@ Dépôt › **Settings › Pages** › Source : *Deploy from a branch* › Branc
 ## Utilisation
 - **Élèves** : ouvrir l'app, « Se connecter avec mon compte de l'école », puis « Ouvrir Dossier TP ». La connexion est gardée 180 jours. Le travail s'enregistre sur l'appareil et part dans le Sheet dès qu'il y a internet. Remettre un dossier (avec la photo) demande internet.
 - **Profs** : ajouter une adresse dans l'onglet **Profs**. Bloquer un élève : ajouter son adresse dans **Bloqués**.
+- **Classes** : une ligne par classe dans l'onglet **Classes**, avec l'adresse du professeur titulaire (liste déroulante tirée de l'onglet Profs). Les élèves choisissent leur classe et leur professeur dans l'app.
+- **Propriétaire** : le prof dont la remarque, dans l'onglet Profs, contient « Propriétaire » voit le bouton **Nouvelle année scolaire** (archive dans le Drive, puis remise à zéro des élèves et des dossiers).
 - **Catalogue** : modifiable depuis l'app (page Catalogue, mode prof) ou directement dans l'onglet Catalogue.
 
 ## Mettre à jour le script
-Recoller `Code.gs`, puis **Déployer › Gérer les déploiements**, crayon, *Version : Nouvelle version*, **Déployer** – pour les **deux** déploiements. Les adresses ne changent pas.
+Recoller `Code.gs`, exécuter **installer** (ajoute les onglets et colonnes manquants, sans toucher aux données), puis **Déployer › Gérer les déploiements**, crayon, *Version : Nouvelle version*, **Déployer** – pour les **deux** déploiements. Les adresses ne changent pas.

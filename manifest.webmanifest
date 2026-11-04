@@ -1,0 +1,29 @@
+{
+  "name": "Dossier TP – Institut Saint-Roch",
+  "short_name": "Dossier TP",
+  "description": "Schémas, bon de commande et outillage pour les travaux pratiques d'électricité.",
+  "lang": "fr-BE",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eceff2",
+  "theme_color": "#8c1d2e",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

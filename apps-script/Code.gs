@@ -24,7 +24,8 @@ const ONGLETS = {
   classes: { nom: 'Classes', entetes: ['Classe', 'Professeur (adresse)', 'Professeur 2 (facultatif)', 'Remarque'] },
   bloques: { nom: 'Bloqués', entetes: ['Adresse', 'Raison', 'Date'] },
   eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion', 'Professeur'] },
-  dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique', 'Schémas à la main'] },
+  dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique', 'Schémas à la main', 'Essai (prof)'] },
+  exercices: { nom: 'Exercices', entetes: ['id', 'N°', 'Titre', 'Définition (JSON)', 'Auteur', 'Modifié le', 'Visible'] },
   catalogue: { nom: 'Catalogue', entetes: ['id', 'Catégorie', 'Description', 'Référence', 'Marque', 'Unité', 'Prix HTVA', 'Couleur', 'Visible', 'À vérifier'] },
 };
 
@@ -140,6 +141,9 @@ const ACTIONS = {
   joindre: (u, q) => joindre_(u, String(q.ex), String(q.partie), String(q.fichier || ''), String(q.nom || '')),
   retirer: (u, q) => retirer_(u, String(q.ex), String(q.partie)),
   monFichier: (u, q) => monFichier_(u, String(q.id)),
+  profEssai: (u, q) => (prof_(u), profEssai_(u, String(q.email).toLowerCase(), String(q.ex), q.essai || {})),
+  exSauver: (u, q) => (prof_(u), exSauver_(u, q.exercice || {})),
+  exVisible: (u, q) => (prof_(u), exVisible_(String(q.id), !!q.visible)),
   profAffecter: (u, q) => (prof_(u), profAffecter_(String(q.email).toLowerCase(), String(q.classe || ''), String(q.prof || '').toLowerCase())),
   profNouvelleAnnee: (u, q) => (admin_(u), nouvelleAnnee_(String(q.confirmation || ''))),
 };
@@ -203,7 +207,7 @@ function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).tr
    Élève
    ========================================================= */
 function moi_(u) {
-  const res = { email: u.email, role: u.role, catalogue: lireCatalogue_(u.role), annee: annee_(), classes: listeClasses_(), profs: listeProfs_() };
+  const res = { email: u.email, role: u.role, catalogue: lireCatalogue_(u.role), annee: annee_(), classes: listeClasses_(), profs: listeProfs_(), exercices: listeExercices_(u.role) };
   if (u.role === 'prof') { const n = nomDepuisEmail_(u.email); res.profil = { prenom: n.prenom, nom: n.nom, classe: '', confirme: true }; res.admin = estAdmin_(u.email); return res; }
   // (les élèves reçoivent aussi l'état de correction de chaque TP)
   return verrou_(() => {
@@ -247,9 +251,10 @@ function lireDossier_(u, ex) {
   d.correction = r[9] === true ? json_(r[8], null) : null;
   d.historique = json_(r[11], []);
   d.mains = json_(r[12], {});
+  d.essaiProf = json_(r[13], null);
   return d;
 }
-const CHAMPS_SERVEUR = ['remis', 'photoId', 'remises', 'correction', 'historique', 'mains'];
+const CHAMPS_SERVEUR = ['remis', 'photoId', 'remises', 'correction', 'historique', 'mains', 'essaiProf'];
 function nettoyer_(json) { const d = json_(json, {}) || {}; CHAMPS_SERVEUR.forEach(k => delete d[k]); return JSON.stringify(d); }
 function sauverDossier_(u, ex, json) {
   if (u.role !== 'eleve') return true;
@@ -361,7 +366,7 @@ function profEleves_() {
   const dossiers = lignes_('dossiers');
   return lignes_('eleves').map(r => {
     const email = String(r[0]).toLowerCase(), ex = {};
-    dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 }; });
+    dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { essai: (json_(d[13], {}) || {}).premier || '', remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 }; });
     return { email, prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
   }).sort((a, b) => (String(a.classe) + ' ' + a.nom + ' ' + a.prenom).localeCompare(String(b.classe) + ' ' + b.nom + ' ' + b.prenom));
 }
@@ -377,6 +382,7 @@ function profDossier_(email, ex) {
     remises: i >= 0 ? Number(rows[i][10]) || 0 : 0,
     historique: i >= 0 ? json_(rows[i][11], []) : [],
     mains: i >= 0 ? json_(rows[i][12], {}) || {} : {},
+    essaiProf: i >= 0 ? json_(rows[i][13], null) : null,
     profil: el ? { prenom: el[1], nom: el[2], classe: el[3] } : null,
     planche: el ? { validee: el[5] === true, lignes: json_(el[6], []) } : { validee: false, lignes: [] },
   };
@@ -397,6 +403,50 @@ function profAffecter_(email, classe, prof) {
   });
 }
 
+/* ---------- essais pratiques (partie professeur) ---------- */
+function profEssai_(u, email, ex, essai) {
+  const json = JSON.stringify(Object.assign({}, essai, { par: u.email, le: Date.now() }));
+  if (json.length > 30000) throw new Error('Données d\'essai trop volumineuses.');
+  return verrou_(() => {
+    const sh = onglet_('dossiers');
+    let { i } = ligneDossier_(email, ex);
+    if (i < 0) { sh.appendRow([email, ex, '{}', new Date(), false, '', '', '', '', false, 0, '', '', '']); i = ligneDossier_(email, ex).i; }
+    sh.getRange(i + 2, 14).setValue(json);
+    return true;
+  });
+}
+
+/* ---------- exercices créés par les professeurs ---------- */
+function listeExercices_(role) {
+  return lignes_('exercices').filter(r => String(r[0]).trim()).map(r => {
+    const def = json_(r[3], null);
+    if (!def) return null;
+    return Object.assign(def, { id: String(r[0]), num: String(r[1]), titre: String(r[2]), auteur: String(r[4] || ''), visible: r[6] !== false, perso: true });
+  }).filter(e => e && (role === 'prof' || e.visible));
+}
+function exSauver_(u, e) {
+  const id = String(e.id || ('x' + Date.now().toString(36))).replace(/[^\w-]/g, '').slice(0, 30);
+  if (/^tp\d/.test(id)) throw new Error('Identifiant réservé.');
+  const def = { court: String(e.court || '').slice(0, 60), intro: String(e.intro || '').slice(0, 600), devices: e.devices || [], lampes: Number(e.lampes) || 0, cmd: e.cmd || [], montage: e.montage || '', vv: !!e.vv };
+  const json = JSON.stringify(def);
+  if (json.length > 5000) throw new Error('Exercice trop volumineux.');
+  return verrou_(() => {
+    const sh = onglet_('exercices'), rows = lignes_('exercices'), i = rows.findIndex(r => String(r[0]) === id);
+    const vals = [id, String(e.num || '').slice(0, 10), String(e.titre || 'Nouvel exercice').slice(0, 80), json, u.email, new Date(), e.visible !== false];
+    if (i < 0) { sh.appendRow(vals); sh.getRange(sh.getLastRow(), 7).insertCheckboxes().setValue(e.visible !== false); }
+    else sh.getRange(i + 2, 1, 1, 7).setValues([vals]);
+    return { id };
+  });
+}
+function exVisible_(id, visible) {
+  return verrou_(() => {
+    const rows = lignes_('exercices'), i = rows.findIndex(r => String(r[0]) === id);
+    if (i < 0) throw new Error('Exercice introuvable.');
+    onglet_('exercices').getRange(i + 2, 7).setValue(visible);
+    return true;
+  });
+}
+
 /* ---------- nouvelle année scolaire ---------- */
 function nouvelleAnnee_(confirmation) {
   const annee = annee_();
@@ -410,7 +460,7 @@ function nouvelleAnnee_(confirmation) {
     DriveApp.getFileById(copie.getId()).moveTo(dossier);
     try { const ph = dossierPhotos_(); ph.setName('Photos des élèves ' + annee); ph.moveTo(dossier); } catch (e) { /* dossier photos introuvable */ }
     props.setProperty('DOSSIER_PHOTOS', DriveApp.createFolder('Dossier TP – photos des élèves').getId());
-    // 2. remise à zéro (Profs, Classes et Catalogue sont gardés)
+    // 2. remise à zéro (Profs, Classes, Exercices et Catalogue sont gardés)
     ['eleves', 'dossiers', 'bloques'].forEach(k => {
       const sh = onglet_(k), n = sh.getLastRow();
       if (n >= 2) sh.getRange(2, 1, n - 1, sh.getMaxColumns()).clearContent();

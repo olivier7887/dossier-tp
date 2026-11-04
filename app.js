@@ -148,7 +148,7 @@ function variante(ex, email) {
   for (let k = 0; k < 50; k++) {
     positions = shuffle(PLANCHE.positions.map(p => p.id), r).slice(0, ex.devices.length);
     if (!ex.vv) break;
-    const els = ex.devices.map((t, i) => t === 'sch6' ? positions[i].split('-')[0] : null).filter(Boolean);
+    const els = ex.devices.map((t, i) => t === 'sch6' || t === 'sch7' ? positions[i].split('-')[0] : null).filter(Boolean);
     if (new Set(els).size === els.length) break;
   }
   let nS = 0;
@@ -175,6 +175,7 @@ function render() {
   if (VIEW.page === 'ex') return exView(main);
   if (VIEW.page === 'apprendre') return apprendreView(main);
   if (VIEW.page === 'catalogue') return catalogueView(main);
+  if (VIEW.page === 'creer') return creerView(main);
   return USER.role === 'prof' ? profHome(main) : homeEleve(main);
 }
 
@@ -237,7 +238,7 @@ function bindLogin() {
   const tryLogin = email => {
     const u = parseEmail(email);
     if (u.error) { $('#login-err').textContent = u.error; return; }
-    loadUser(u); go({ page: 'home' });
+    loadUser(u); chargerExercicesLocaux(); go({ page: 'home' });
   };
   $('#login-form').addEventListener('submit', e => { e.preventDefault(); tryLogin($('#login-email').value); });
   document.querySelectorAll('[data-demo]').forEach(b => b.addEventListener('click', () => tryLogin(b.dataset.demo)));
@@ -333,12 +334,13 @@ function homeEleve(main) {
 }
 
 /* ---------- exercice ---------- */
-const TABS_CABLAGE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['principe', 'Principe'], ['unifilaire', 'Unifilaire'], ['cablage', 'Câblage'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['remise', 'Remise'], ['correction', 'Correction']];
+const TABS_CABLAGE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['principe', 'Principe'], ['unifilaire', 'Unifilaire'], ['cablage', 'Câblage'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['essais', 'Essais'], ['remise', 'Remise'], ['correction', 'Correction']];
 const TABS_PLANCHE = [['enonce', 'Énoncé'], ['mode', 'Mode opératoire'], ['position', 'Schéma de position'], ['bdc', 'Bon de commande'], ['outils', 'Outillage'], ['remise', 'Remise'], ['correction', 'Correction']];
 let PV = null; const SCRATCH = {}, FETCHED = {};
 let CTX = { planche: { validee: false, lignes: [] }, eleve: null, lecture: false };
 function exView(main) {
   const ex = EXERCICES.find(e => e.id === VIEW.id);
+  if (!ex) { VIEW = { page: 'home' }; return render(); }
   const tabsTous = ex.kind === 'planche' ? TABS_PLANCHE : TABS_CABLAGE;
   let tabs = tabsTous;
   const tab0 = VIEW.tab || 'enonce';
@@ -384,6 +386,7 @@ function exView(main) {
       ${canPrint ? '<span class="row wrapr"><button type="button" class="btn ghost small" id="print">Imprimer cette feuille</button><button type="button" class="btn small" id="print-all">Imprimer tout le dossier</button></span>' : ''}</div>
     ${cartouche(p, ex, tabLbl)}
     ${USER.role === 'prof' && CTX.eleve ? `<p class="notice prof">Dossier de <b>${esc(p.prenom)} ${esc(p.nom)}</b> (${esc(email)}) · ${PV.remis ? 'remis' : PV.data && PV.data.maj ? 'en cours' : 'pas encore commencé'}. Consultation : vos modifications ne sont pas enregistrées.</p>` : ''}
+    ${USER.role === 'prof' && !CTX.eleve && ex.perso ? `<p class="notice prof">Exercice créé${ex.auteur ? ' par ' + esc(nomProf(ex.auteur)) : ''}${ex.visible === false ? ' · masqué aux élèves' : ''}. <button type="button" class="btn small" id="ex-modif">Modifier cet exercice</button></p>` : ''}
     ${USER.role === 'prof' && !CTX.eleve ? `<p class="notice prof">Aperçu professeur : version de l'exercice pour <b>${esc(email)}</b>.${ONLINE ? ' Rien n\'est enregistré.' : ` <label class="inline">Autre élève <input id="pv-email" type="email" value="${esc(email)}"></label>`}</p>` : ''}
     ${USER.role === 'eleve' && d.remis ? (d.correction && (d.remises || 1) < 2 ? '<p class="notice">Ce dossier est corrigé. Lisez la correction : vous pouvez ensuite le corriger et le remettre une seconde fois.</p>' : d.correction ? '<p class="notice">Ce dossier est corrigé.</p>' : '<p class="notice">Ce dossier est remis : il ne peut plus être modifié en attendant la correction du professeur.</p>') : ''}
     <nav class="tabs" aria-label="Feuilles du dossier">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${k === tab ? 'on' : ''}" aria-current="${k === tab ? 'page' : 'false'}">${l}</button>`).join('')}</nav>
@@ -391,6 +394,7 @@ function exView(main) {
   main.querySelector('[data-nav2]').addEventListener('click', () => go({ page: 'home' }));
   main.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.tab }))));
   const pr = $('#print'); if (pr) pr.addEventListener('click', () => window.print());
+  const em = $('#ex-modif'); if (em) em.addEventListener('click', () => { CREA = null; go({ page: 'creer', id: ex.id }); });
   const pa = $('#print-all'); if (pa) pa.addEventListener('click', () => imprimerTout(pa, { ex, v, d, p, tabs }));
   const pv = $('#pv-email'); if (pv) pv.addEventListener('change', () => { if (!parseEmail(pv.value).error) go(Object.assign({}, VIEW, { eleve: pv.value.trim().toLowerCase() })); });
   main.querySelector('[data-nav2]').addEventListener('click', () => { if (CTX.eleve) PV = null; });
@@ -419,6 +423,7 @@ function renderTab(tab, sheet, ex, v, d) {
     position: () => { sheet.innerHTML = sheetHead('Schéma de position', 'Planche vue de face, cotes en mm. Reportez ces cotes au crayon sur la planche avant de fixer quoi que ce soit.', 'sch-position') + '<div class="svg-wrap paper-wrap" id="pos"></div>'; renderPosition($('#pos')); bindFiches(sheet); mainBox(sheet, ex, d, 'position'); },
     bdc: () => bdcSheet(sheet, ex, v, d),
     outils: () => outilsSheet(sheet, ex, d),
+    essais: () => essaisSheet(sheet, ex, v, d),
     remise: () => remiseSheet(sheet, ex, d),
     correction: () => correctionSheet(sheet, ex, v, d),
   })[tab]();
@@ -457,7 +462,7 @@ async function fichiersDossier(ex, d) {
   if (prof && !CTX.eleve) return { photo: null, mains: {} };
   const photoId = prof ? PV.photoId : d.photoId;
   const mains = (prof ? PV.mains : d.mains) || {};
-  const lire = id => api(prof ? 'profPhoto' : 'monFichier', { id });
+  const lire = id => urlPhoto(id);
   const res = { photo: null, mains: {} };
   const t = [];
   if (!prof && PHOTOS[ex.id]) res.photo = PHOTOS[ex.id];
@@ -817,7 +822,7 @@ function remiseSheet(sheet, ex, d) {
   const aPhoto = !!(PHOTOS[ex.id] || d.photoId || (prof && PV.photoId));
   const parts = ex.kind === 'planche'
     ? [['Bon de commande', d.bdc.lignes.length > 0 && !!d.bdc.tva], ['Outillage', Object.values(d.outils || {}).some(Boolean)], ['Photo de la planche', aPhoto]]
-    : [['Schéma de principe', (d.principe.syms || []).length > 0], ['Schéma unifilaire', (d.unifilaire.points || []).length > 0], ['Schéma de câblage', (d.cablage.wires || []).length > 0], ['Bon de commande', d.bdc.lignes.length > 0 && !!d.bdc.tva], ['Outillage', Object.values(d.outils || {}).some(Boolean)], ['Photo du montage', aPhoto]];
+    : [['Schéma de principe', (d.principe.syms || []).length > 0], ['Schéma unifilaire', (d.unifilaire.points || []).length > 0], ['Schéma de câblage', (d.cablage.wires || []).length > 0], ['Bon de commande', d.bdc.lignes.length > 0 && !!d.bdc.tva], ['Outillage', Object.values(d.outils || {}).some(Boolean)], ['Mesures hors tension (Essais)', essaisComplets(ex, variante(ex, prof ? CTX.eleve : USER.email), d)], ['Photo du montage', aPhoto]];
   const remis = prof ? PV.remis : !!d.remis;
   sheet.innerHTML = `${sheetHead('Remise du dossier', prof ? 'État du dossier de l\'élève et photo de son montage.' : 'Vérifiez que chaque partie est complète, ajoutez la photo de votre planche, puis remettez le dossier.')}
     <ul class="parts">${parts.map(([n, ok]) => `<li class="${ok ? 'ok' : ''}"><span class="dot" aria-hidden="true"></span>${n}<span class="state ${ok ? 'ok' : ''}">${ok ? 'Complété' : 'À faire'}</span></li>`).join('')}</ul>
@@ -1007,12 +1012,18 @@ function correctionSheet(sheet, ex, v, d) {
   if (prof && CTX.eleve) {
     const saved = PV.correction;
     const g = Object.assign({}, auto.grille, saved && saved.grille);
+    const propPF = propositionProduit(ex, v, PV.essaiProf);
+    if ((g.produit == null || g.produit === '') && propPF) g.produit = propPF.total;
+    if (PV.annot === undefined) PV.annot = (saved && saved.annot) || null;
     const h0 = (PV.historique || [])[0];
     sheet.innerHTML = `${sheetHead('Correction', 'La correction automatique est calculée à partir du dossier de l\'élève. Ajustez les points si besoin, ajoutez un commentaire, puis publiez : l\'élève verra le détail de ses erreurs avec les explications.')}
       <p class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span>' : '<span class="state cur">Pas encore remis</span>'}
         <span class="state">${PV.remises >= 2 ? 'Seconde remise' : PV.remises === 1 ? 'Première remise' : 'Aucune remise'}</span>
         ${saved ? (PV.publiee ? '<span class="state ok">Correction publiée</span>' : '<span class="state todo">Brouillon enregistré</span>') : ''}</p>
       ${htmlMainsProf(PV.mains)}
+      ${propPF ? `<p class="muted small">Produit fini proposé d'après la feuille Essais : ${num(propPF.total)} / 45 (réalisation ${num(propPF.real)}, essais ${num(propPF.essais)}, dépannage ${num(propPF.dep)}).</p>` : ''}
+      ${PV.photoId && ONLINE ? `<div class="mains-corr"><h3>Photo du montage</h3><p class="muted small">Entourez ou fléchez ce qui ne va pas, ajoutez un mot : l'élève verra la photo annotée avec sa correction.</p>
+        <div class="row wrapr"><button type="button" class="btn small" id="an-go">${PV.annot && PV.annot.items.length ? `Modifier les annotations (${PV.annot.items.length})` : 'Annoter la photo'}</button></div><div id="an-prev" class="an-prev"></div></div>` : ''}
       ${h0 && h0.correction ? `<details class="corr-hist"><summary>Correction de la première remise : ${num(totalGrille(h0.correction.grille || {}).tot)} points</summary>${htmlParties(h0.correction.parties || [])}</details>` : ''}
       <div class="corr-grid">
         <div class="corr-side">
@@ -1030,7 +1041,7 @@ function correctionSheet(sheet, ex, v, d) {
     const majTot = () => { const { tot, max } = totalGrille(lire()); $('#g-tot').textContent = num(tot); $('#g-max').innerHTML = `${max || 215}${max ? ` <span class="muted">· ${Math.round(tot / max * 100)} %</span>` : ''}`; };
     sheet.querySelectorAll('[data-g]').forEach(i => i.addEventListener('input', majTot));
     const envoyer = publier => {
-      const corr = { date: Date.now(), essai: PV.remises || 1, grille: lire(), commentaire: $('#g-com').value.trim(), parties: auto.parties.map(p => ({ id: p.id, titre: p.titre, max: p.max, score: p.score, F: p.F })) };
+      const corr = { date: Date.now(), essai: PV.remises || 1, grille: lire(), commentaire: $('#g-com').value.trim(), parties: auto.parties.map(p => ({ id: p.id, titre: p.titre, max: p.max, score: p.score, F: p.F })), annot: PV.annot && PV.annot.items.length ? PV.annot : null };
       $('#g-msg').textContent = publier ? 'Publication…' : 'Enregistrement…';
       api('profCorriger', { email: CTX.eleve, ex: ex.id, correction: corr, publier })
         .then(() => { PV.correction = corr; if (publier) PV.publiee = true; ELEVES = null; go(VIEW); })
@@ -1039,6 +1050,21 @@ function correctionSheet(sheet, ex, v, d) {
     $('#g-save').addEventListener('click', () => envoyer(false));
     $('#g-pub').addEventListener('click', () => envoyer(true));
     bindFiches(sheet); bindVoirMains(sheet, PV.mains);
+    const anPrev = $('#an-prev', sheet); if (anPrev && PV.annot) blocPhotoAnnotee(anPrev, PV.annot);
+    const anGo = $('#an-go', sheet);
+    if (anGo) anGo.addEventListener('click', async () => {
+      anGo.disabled = true; const t = anGo.textContent; anGo.textContent = 'Chargement de la photo…';
+      try {
+        const u = await urlPhoto(PV.photoId);
+        editeurAnnotations(u, PV.annot, items => {
+          PV.annot = { photoId: PV.photoId, items };
+          if (anPrev) blocPhotoAnnotee(anPrev, PV.annot);
+          anGo.textContent = items.length ? `Modifier les annotations (${items.length})` : 'Annoter la photo';
+          $('#g-msg').textContent = 'Annotations prêtes : enregistrez le brouillon ou publiez.';
+        });
+      } catch (e) { $('#g-msg').textContent = e.message; anGo.textContent = t; }
+      finally { anGo.disabled = false; }
+    });
     return;
   }
   if (prof) {
@@ -1058,8 +1084,9 @@ function correctionSheet(sheet, ex, v, d) {
         ${peutReprendre ? `<div class="corr-again"><p>Vous pouvez corriger votre dossier et le remettre <b>une seconde fois</b>. Les deux résultats sont gardés.</p>
           <button type="button" class="btn primary" id="reprendre">Corriger et remettre</button><p id="rep-msg" class="muted small" role="status"></p></div>` : ((d.remises || 0) >= 2 ? '<p class="muted small">Seconde remise utilisée.</p>' : '')}
       </div>
-      <div class="corr-main"><h3>Le détail</h3>${htmlParties(corr.parties || [])}</div>
+      <div class="corr-main"><h3>Le détail</h3>${htmlParties(corr.parties || [])}<div class="an-eleve"></div></div>
     </div>`;
+  if (corr.annot) blocPhotoAnnotee(sheet.querySelector('.an-eleve'), corr.annot);
   bindFiches(sheet);
   const rp = $('#reprendre');
   if (rp) rp.addEventListener('click', async () => {
@@ -1123,10 +1150,10 @@ function profHome(main) {
     </div>
     <p class="muted small" id="el-compte"></p>
     <div id="eleves" class="table-wrap"><p class="empty">Chargement de la liste…</p></div>` : ''}
-    <section class="hello"><h2>Exercices</h2>
-      <p>Ouvrez un exercice pour voir ce que voit un élève. Chaque élève reçoit sa propre variante (emplacements, couleur des finitions, type de chantier pour la TVA), calculée à partir de son adresse.</p></section>
+    <section class="hello"><div class="row between wrapr"><h2>Exercices</h2><button type="button" class="btn primary small" id="ex-creer">+ Créer un exercice</button></div>
+      <p>Ouvrez un exercice pour voir ce que voit un élève. Chaque élève reçoit sa propre variante (emplacements, couleur des finitions, type de chantier pour la TVA), calculée à partir de son adresse. Un exercice créé par un professeur est visible par tous les élèves.</p></section>
     <ol class="ex-list">${EXERCICES.map(ex => `<li><button type="button" class="ex-card" data-ex="${ex.id}">
-      <span class="ex-num">TP ${ex.num}</span><span class="ex-main"><span class="ex-title">${esc(ex.titre)}</span><span class="ex-sub">${esc(ex.court)}</span></span><span class="state">Aperçu</span></button></li>`).join('')}</ol>
+      <span class="ex-num">TP ${ex.num}</span><span class="ex-main"><span class="ex-title">${esc(ex.titre)}</span><span class="ex-sub">${esc(ex.court)}</span></span><span class="state ${ex.perso && ex.visible === false ? '' : ex.perso ? 'cur' : ''}">${ex.perso ? (ex.visible === false ? 'Masqué' : 'Créé') : 'Aperçu'}</span></button></li>`).join('')}</ol>
     ${ONLINE && DATA.admin ? `<section class="card zone-annee">
       <h2>Nouvelle année scolaire</h2>
       <p>Année en cours dans l'app : <b>${esc(DATA.annee || '')}</b>. En fin d'année, ce bouton archive tout (copie du tableur et photos, dans un dossier Drive « Dossier TP – archive ${esc(DATA.annee || '')} »), puis vide la liste des élèves et leurs dossiers. Le catalogue, les profs et les classes sont gardés : mettez-les à jour ensuite dans le Google Sheet.</p>
@@ -1141,6 +1168,7 @@ function profHome(main) {
     </section>`;
   main.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => go({ page: 'ex', id: b.dataset.ex, tab: 'enonce' })));
   const na = $('#na-open'); if (na) na.addEventListener('click', openNouvelleAnnee);
+  $('#ex-creer').addEventListener('click', () => { CREA = null; go({ page: 'creer' }); });
   if (!ONLINE) return;
   const majFiltres = () => {
     const vue = vueEleves();
@@ -1176,7 +1204,8 @@ function profHome(main) {
   $('#el-classe').addEventListener('change', e => { FILTRE_CLASSE = e.target.value; draw(); });
   $('#el-q').addEventListener('input', e => { FILTRE_ELEVES = e.target.value; draw(); });
   $('#el-maj').addEventListener('click', () => { ELEVES = null; $('#eleves').innerHTML = '<p class="empty">Chargement de la liste…</p>'; charger(); });
-  if (ELEVES) draw(); else { majFiltres(); charger(); }
+  if (ELEVES) draw(); else majFiltres();
+  charger(); // toujours rafraîchie en arrière-plan : nouvelles remises, nouveaux élèves
 }
 function openAffecter(e, redraw) {
   if (!e) return;
@@ -1254,6 +1283,7 @@ async function rafraichir() {
   try {
     const r = await api('moi');
     USER.role = r.role;
+    if (Array.isArray(r.exercices)) { store.set('tp3pelec:exos', r.exercices); appliquerExercicesPerso(r.exercices); }
     if (Array.isArray(r.classes)) { LISTES = { classes: r.classes, profs: r.profs || [] }; store.set('tp3pelec:listes', LISTES); }
     if (r.annee) {
       if (DATA.annee && DATA.annee !== r.annee) nouvelleAnneeLocale();
@@ -1283,6 +1313,7 @@ function demarrerEnLigne() {
   DATA = store.get('tp3pelec:' + p.e, null) || { profil: { prenom: n.prenom, nom: n.nom, classe: '', prof: '', confirme: p.r !== 'eleve' }, ex: {}, planche: { validee: false, lignes: [] }, resume: {}, dirty: {} };
   const cat = store.get('tp3pelec:cat-cache', null);
   if (Array.isArray(cat) && cat.length) CATALOGUE.splice(0, CATALOGUE.length, ...cat);
+  chargerExercicesLocaux();
   VIEW = { page: 'home' }; render();
   rafraichir();
 }
@@ -1290,7 +1321,7 @@ function demarrerEnLigne() {
   if (!ONLINE) {
     loadCatalogue();
     const last = store.get('tp3pelec:session', null);
-    if (last) { const u = parseEmail(last); if (!u.error) { loadUser(u); VIEW = { page: 'home' }; } }
+    if (last) { const u = parseEmail(last); if (!u.error) { loadUser(u); chargerExercicesLocaux(); VIEW = { page: 'home' }; } }
     render();
     return;
   }

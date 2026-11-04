@@ -497,6 +497,63 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
   .print-page + .print-page { border: 0; padding-top: 0; }
   .print-img { border: 0; break-inside: avoid; }
 }
+
+/* V3 : créateur d'exercices */
+.cr-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 760px) { .cr-grid { grid-template-columns: 1fr; } .cr-palette { position: static !important; display: flex !important; flex-wrap: wrap; } .cr-palette h3 { width: 100%; } }
+.cr-palette { position: sticky; top: 76px; display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.cr-palette h3 { margin: 4px 0 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.cr-chip { display: flex; gap: 8px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 4px 8px 4px 4px; cursor: grab; color: var(--ink); }
+.cr-chip:hover { border-color: var(--accent); }
+.cr-chip:active { cursor: grabbing; }
+.cr-chip svg, .cr-card svg { width: 30px; height: 34px; flex: none; background: #fff; border-radius: 4px; }
+.cr-chip span { display: grid; line-height: 1.2; } .cr-chip small { color: var(--muted); font-size: .74rem; }
+.cr-main { display: grid; gap: 16px; min-width: 0; }
+.cr-board { display: grid; gap: 14px; padding: 16px; border: 2px dashed var(--line); border-radius: var(--radius); background: color-mix(in srgb, #c89a62 14%, var(--surface)); min-height: 180px; transition: border-color .15s; }
+.cr-board.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.cr-zone h3 { margin: 0 0 8px; font-size: 1rem; }
+.cr-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.cr-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; }
+.cr-card-h { display: flex; gap: 8px; align-items: center; } .cr-card-h span { flex: 1; min-width: 0; }
+.cr-card p { margin: 0; }
+.cr-cmd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cr-vide { color: var(--muted); margin: 0; padding: 10px 0; }
+.cr-msgs .constats { margin: 0; }
+.cr-form textarea { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; }
+.cr-apercu { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+.cr-apercu h2, .cr-apercu p { margin: 0; }
+/* V3 : essais et dépannage */
+.ess-bloc { display: grid; gap: 8px; margin-bottom: 18px; }
+.ess-bloc h3 { margin: 0; } .ess-bloc h4 { margin: 8px 0 0; }
+.ess-tbl select, .ess-tbl input { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); max-width: 100%; }
+.ess-tbl .ohm input { width: 70px; }
+.ko-txt { color: var(--accent); font-weight: 700; } .ok-txt { font-weight: 700; }
+.ess-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.ess-list li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.ess-list li:last-child { border-bottom: 0; }
+.tri { display: inline-flex; gap: 4px; flex: none; }
+.tri-b { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600; cursor: pointer; }
+.tri-b:disabled { cursor: default; }
+.tri-b.ok.on { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.tri-b.ko.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.ess-res { margin: 0; font-weight: 600; } .ess-res.ok { color: var(--ok); } .ess-res.ko { color: var(--accent); }
+.ess-apres { display: flex; gap: 12px; align-items: center; }
+.dep-fiche textarea { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 400; }
+.ess-bloc.pf { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.ess-bloc.pf p { margin: 0; }
+#ess-com { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; }
+/* V3 : photo annotée */
+.annot-wrap { position: relative; display: block; max-width: 100%; line-height: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); background: #fff; }
+.annot-wrap img { width: 100%; height: auto; display: block; }
+.annot-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.annot-wrap.edit .annot-svg { cursor: crosshair; touch-action: none; }
+.annot-dlg { max-width: 1000px; }
+dialog:has(.annot-dlg) { width: min(1000px, calc(100vw - 24px)); }
+.annot-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.annot-tools input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 0; flex: 1 1 200px; }
+.an-prev:empty { display: none; } .an-prev h3 { display: none; }
+.an-eleve { margin-top: 14px; display: grid; gap: 8px; } .an-eleve:empty { display: none; }
+@media print { .tri-b:not(.on) { display: none; } .ess-tbl select, .ess-tbl input { border: 0; appearance: none; } }
 </style>
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0;font-size:14px} img{max-width:100%} [hidden]{display:none!important}</style>
 </head>
@@ -504,10 +561,12 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=6"></script>
-<script src="editors.js?v=6"></script>
-<script src="correction.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="data.js?v=7"></script>
+<script src="editors.js?v=7"></script>
+<script src="correction.js?v=7"></script>
+<script src="pratique.js?v=7"></script>
+<script src="createur.js?v=7"></script>
+<script src="app.js?v=7"></script>
 
 </body>
 </html>

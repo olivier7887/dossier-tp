@@ -179,6 +179,7 @@ function loginOnline() {
         <li>C'est fait. Si cette fenêtre ne change pas toute seule, rechargez-la.</li>
       </ol>
       <p class="muted small" id="login-net"></p>
+      <p class="small"><a href="aide.html">Mode d'emploi : installer et utiliser l'app</a></p>
     </div>
   </div>`;
 }
@@ -255,6 +256,7 @@ function topBar() {
       <button type="button" data-nav="home" class="${VIEW.page === 'home' ? 'on' : ''}">${USER.role === 'prof' ? 'Exercices' : 'Mes TP'}</button>
       <button type="button" data-nav="apprendre" class="${VIEW.page === 'apprendre' ? 'on' : ''}">Apprendre</button>
       <button type="button" data-nav="catalogue" class="${VIEW.page === 'catalogue' ? 'on' : ''}">Catalogue</button>
+      ${ONLINE ? '<a class="navlink" href="aide.html">Aide</a>' : ''}
     </nav>
     <div class="who">${ONLINE && USER.role === 'eleve' ? '<span id="sync" class="sync" role="status"></span>' : ''}<span class="who-name">${esc(p.prenom)} ${esc(p.nom)}</span><span class="pill ${USER.role === 'prof' ? 'pill-prof' : ''}">${USER.role === 'prof' ? 'Professeur' : esc(DATA.profil.classe)}</span>
       <button type="button" class="btn ghost small" id="logout">Déconnexion</button></div>

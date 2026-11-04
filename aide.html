@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="fr-BE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#8c1d2e">
+<title>Dossier TP – Mode d'emploi</title>
+<meta name="description" content="Installer et utiliser l'app Dossier TP – Institut Saint-Roch, Marche-en-Famenne">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Mode d'emploi : une colonne de lecture, étapes numérotées, maquettes des boutons de l'app. */
+:root {
+  --bg: #eceff2; --surface: #ffffff; --surface-2: #f5f7f9; --ink: #1b2129; --muted: #5a6573; --line: #d3d9e0;
+  --accent: #8c1d2e; --accent-ink: #ffffff; --accent-soft: #f6e7ea;
+  --ok: #1d7a49; --ok-soft: #e3f3ea; --warn: #9a5800; --warn-soft: #fbf0dc; --prof: #2f5d8a; --prof-soft: #e4edf6;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181d; --surface: #1c2229; --surface-2: #222a32; --ink: #e6e9ed; --muted: #9aa5b2; --line: #2f3843;
+    --accent: #e0677b; --accent-ink: #1a0b0e; --accent-soft: #3a1d24; --ok: #5cc98d; --ok-soft: #173326;
+    --warn: #e6a74c; --warn-soft: #3a2b14; --prof: #8db8e3; --prof-soft: #1c2c3d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181d; --surface: #1c2229; --surface-2: #222a32; --ink: #e6e9ed; --muted: #9aa5b2; --line: #2f3843;
+  --accent: #e0677b; --accent-ink: #1a0b0e; --accent-soft: #3a1d24; --ok: #5cc98d; --ok-soft: #173326;
+  --warn: #e6a74c; --warn-soft: #3a2b14; --prof: #8db8e3; --prof-soft: #1c2c3d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font-body); }
+.wrap { max-width: 780px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.1; letter-spacing: .01em; text-wrap: balance; margin: 0; }
+h1 { font-size: 2.6rem; } h2 { font-size: 1.75rem; } h3 { font-size: 1.25rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block: 12px; }
+.mark { width: 38px; height: 38px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; flex: none; }
+.mark svg { width: 21px; height: 21px; fill: var(--accent-ink); }
+.brand b { display: block; font-family: var(--font-display); font-size: 1.3rem; line-height: 1; }
+.brand span { font-size: .8rem; color: var(--muted); }
+.top .open { margin-left: auto; }
+
+main { display: grid; gap: 34px; padding-block: 30px 50px; }
+.intro { display: grid; gap: 10px; }
+.intro p { color: var(--muted); font-size: 1.05rem; max-width: 62ch; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+.toc a { text-decoration: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: .9rem; color: var(--ink); }
+.toc a:hover { border-color: var(--accent); }
+
+section { display: grid; gap: 14px; scroll-margin-top: 16px; }
+.lead { color: var(--muted); }
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: s; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 2.2rem 1fr; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+ol.steps > li::before { content: counter(s); font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: var(--accent); line-height: 1.1; }
+ol.steps > li > div { display: grid; gap: 6px; min-width: 0; }
+.tabs3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px; }
+.device { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.device h3 { display: flex; gap: 8px; align-items: center; }
+.device ol { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: .95rem; }
+
+/* maquettes de l'app */
+.ui-btn { display: inline-block; font: 600 .88rem/1 var(--font-body); padding: 7px 12px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); white-space: nowrap; }
+.ui-btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.ui-chip { display: inline-block; font: 600 .78rem/1 var(--font-body); padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.c-ok { background: var(--ok-soft); color: var(--ok); } .c-hors { background: var(--warn-soft); color: var(--warn); }
+.c-cours { background: var(--prof-soft); color: var(--prof); } .c-err { background: var(--accent-soft); color: var(--accent); }
+.mono { font-family: var(--font-mono); font-weight: 500; }
+kbd { font: 500 .85rem var(--font-mono); background: var(--surface-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; }
+
+.sheets { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.sheets > div { display: grid; grid-template-columns: 180px 1fr; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.sheets > div:first-child { border-top: 0; }
+.sheets dt { font-weight: 600; }
+.sheets dd { margin: 0; color: var(--muted); min-width: 0; }
+@media (max-width: 560px) { .sheets > div { grid-template-columns: 1fr; gap: 2px; } }
+
+.states { display: grid; gap: 8px; }
+.states > div { display: grid; grid-template-columns: 300px 1fr; gap: 12px; align-items: baseline; }
+@media (max-width: 560px) { .states > div { grid-template-columns: 1fr; gap: 2px; } }
+.states .ui-chip { justify-self: start; }
+.states .ui-chip { min-width: 0; }
+
+.note { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); border-radius: 10px; padding: 12px 16px; }
+.note.prof { background: var(--prof-soft); border-color: color-mix(in srgb, var(--prof) 30%, transparent); }
+
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; }
+details + details { margin-top: 8px; }
+summary { cursor: pointer; font-weight: 600; padding: 12px 0; list-style-position: outside; }
+details[open] summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+details > p, details > ul { padding-bottom: 14px; }
+details ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+
+.prof-zone { border-top: 3px solid var(--prof); padding-top: 20px; }
+.prof-zone h2 { color: var(--prof); }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+
+footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-block: 18px 30px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+@media print { header.top .open, .toc { display: none; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M18 2 6 18h8l-2 12 12-16h-8z"/></svg></span>
+  <span class="brand"><b>Dossier TP</b><span>Institut Saint-Roch · Marche-en-Famenne</span></span>
+  <a class="ui-btn open" href="./">Ouvrir l'app</a>
+</div></header>
+
+<main class="wrap">
+  <div class="intro">
+    <h1>Mode d'emploi</h1>
+    <p>Dossier TP rassemble tout ce qu'il faut pour un travail pratique d'électricité : l'énoncé, le mode opératoire, les trois schémas, le bon de commande et la liste d'outillage. On l'installe une fois, on se connecte une fois, puis elle fonctionne même sans internet.</p>
+    <nav class="toc" aria-label="Sommaire">
+      <a href="#installer">1. Installer</a><a href="#connecter">2. Se connecter</a><a href="#travailler">3. Faire un TP</a>
+      <a href="#enregistrer">4. Enregistrement</a><a href="#remettre">5. Remettre</a><a href="#problemes">Problèmes</a><a href="#profs">Professeurs</a>
+    </nav>
+  </div>
+
+  <section id="installer">
+    <h2>1. Installer l'app</h2>
+    <p class="lead">Ouvrez <a href="./">olivier7887.github.io/dossier-tp</a> dans <b>Chrome</b>, puis installez-la. Elle apparaît ensuite comme une vraie app, avec son icône.</p>
+    <div class="tabs3">
+      <div class="device"><h3>Chromebook ou PC</h3>
+        <ol><li>Dans la barre d'adresse, à droite, cliquez sur l'icône <b>Installer</b> (un écran avec une flèche).</li>
+          <li>Sinon : menu <kbd>⋮</kbd> › <b>Caster, enregistrer et partager</b> › <b>Installer la page en tant qu'application</b>.</li>
+          <li>Confirmez avec <b>Installer</b>.</li></ol></div>
+      <div class="device"><h3>Smartphone Android</h3>
+        <ol><li>Ouvrez le lien dans Chrome.</li>
+          <li>Menu <kbd>⋮</kbd> › <b>Ajouter à l'écran d'accueil</b> ou <b>Installer l'application</b>.</li>
+          <li>L'icône « Dossier TP » arrive sur l'écran d'accueil.</li></ol></div>
+      <div class="device"><h3>iPhone</h3>
+        <ol><li>Ouvrez le lien dans Safari.</li>
+          <li>Touchez <b>Partager</b> (le carré avec une flèche vers le haut).</li>
+          <li>Choisissez <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li></ol></div>
+    </div>
+  </section>
+
+  <section id="connecter">
+    <h2>2. Se connecter (une seule fois)</h2>
+    <p class="lead">Il faut internet pour cette étape. Utilisez votre compte de l'école : <b class="mono">prénom.nom.student@elmarche.be</b>.</p>
+    <ol class="steps">
+      <li><div><p>Dans l'app, cliquez sur <span class="ui-btn">Se connecter avec mon compte de l'école</span>.</p></div></li>
+      <li><div><p>Une page Google s'ouvre et affiche « Bonjour … ! » avec votre adresse. Cliquez sur <span class="ui-btn">Ouvrir Dossier TP</span>.</p>
+        <p class="lead">Si l'adresse affichée n'est pas celle de l'école, changez de compte Google et recommencez.</p></div></li>
+      <li><div><p>Revenez dans l'app. Si elle n'a pas changé toute seule, fermez-la et rouvrez-la.</p></div></li>
+      <li><div><p>La première fois, vérifiez votre <b>prénom</b>, votre <b>nom</b> et votre <b>classe</b> (une adresse n'a pas d'accents : corrigez-les), puis cliquez sur <span class="ui-btn">Confirmer</span>. Ils apparaîtront en haut de toutes vos feuilles.</p></div></li>
+    </ol>
+    <p class="note">La connexion est gardée <b>180 jours</b>, même sans internet. N'utilisez pas l'app avec le compte d'un autre élève : tout ce que vous faites est enregistré à votre nom.</p>
+  </section>
+
+  <section id="travailler">
+    <h2>3. Faire un TP</h2>
+    <p class="lead">Sur la page <b>Mes TP</b>, commencez toujours par le <b>TP 0</b> (le montage de la planche). Chaque TP s'ouvre sur un dossier en plusieurs feuilles, comme vos feuilles papier.</p>
+    <dl class="sheets">
+      <div><dt>Énoncé</dt><dd>Ce que le client demande : appareils, emplacements, couleur de la finition, type de chantier. Votre version est personnelle : elle n'est pas la même que celle de votre voisin.</dd></div>
+      <div><dt>Mode opératoire</dt><dd>Les étapes du travail, dans l'ordre. Cochez-les au fur et à mesure. « Comment faire ? » ouvre la fiche qui explique l'étape.</dd></div>
+      <div><dt>Principe</dt><dd>Posez les symboles entre L1 et N, puis reliez-les. Touche <kbd>R</kbd> : pivoter. <kbd>Suppr</kbd> : effacer.</dd></div>
+      <div><dt>Unifilaire</dt><dd>Choisissez le disjoncteur et la canalisation, puis ajoutez les points raccordés : le schéma se dessine tout seul.</dd></div>
+      <div><dt>Câblage</dt><dd>Placez les appareils sur la planche, puis tirez les fils d'une borne à l'autre. Dans la boîte de dérivation, chaque point noir est une borne Wago. « Zoom boîte » agrandit la boîte.</dd></div>
+      <div><dt>Bon de commande</dt><dd>Ajoutez le matériel depuis le catalogue, réglez les quantités, choisissez le taux de TVA et expliquez pourquoi. Le matériel de la planche, validé au TP 0, est repris d'office.</dd></div>
+      <div><dt>Outillage</dt><dd>Cochez les outils nécessaires pour le TP.</dd></div>
+      <div><dt>Remise</dt><dd>Vérifiez que tout est complet, ajoutez la photo de votre montage et remettez le dossier.</dd></div>
+    </dl>
+    <p>Bloqué ? Le menu <b>Apprendre</b> rassemble toutes les fiches : interrupteurs, outils, fils et tubes, schémas, sécurité et TVA.</p>
+  </section>
+
+  <section id="enregistrer">
+    <h2>4. Enregistrement et hors connexion</h2>
+    <p class="lead">Il n'y a pas de bouton « Enregistrer » : tout est enregistré automatiquement. En haut à droite, un petit indicateur vous dit où en est votre travail.</p>
+    <div class="states">
+      <div><span class="ui-chip c-ok">Enregistré</span><span>Votre travail est sur le serveur de l'école. Tout va bien.</span></div>
+      <div><span class="ui-chip c-cours">Enregistrement…</span><span>L'envoi est en cours, quelques secondes.</span></div>
+      <div><span class="ui-chip c-hors">Hors connexion · enregistré sur l'appareil</span><span>Pas d'internet : votre travail est gardé sur l'appareil et partira tout seul au retour du réseau.</span></div>
+      <div><span class="ui-chip c-err">Erreur</span><span>L'envoi a été refusé. Lisez le message et prévenez le professeur.</span></div>
+    </div>
+    <p class="note">Hors connexion, travaillez toujours sur le <b>même appareil</b> jusqu'à ce que l'indicateur repasse à « Enregistré ». Sinon, l'autre appareil ne verra pas vos dernières modifications.</p>
+  </section>
+
+  <section id="remettre">
+    <h2>5. Remettre le dossier</h2>
+    <ol class="steps">
+      <li><div><p>Dans la feuille <b>Remise</b>, vérifiez que chaque partie affiche <span class="ui-chip c-ok">Complété</span>.</p></div></li>
+      <li><div><p>Cliquez sur <span class="ui-btn ghost">Prendre ou choisir une photo</span>. Sur smartphone, l'appareil photo s'ouvre. Photographiez <b>toute la planche, de face</b>, bien éclairée.</p></div></li>
+      <li><div><p>Avec internet, cliquez sur <span class="ui-btn">Remettre le dossier</span>.</p></div></li>
+    </ol>
+    <p class="note">Un dossier remis ne peut plus être modifié. Si vous devez corriger quelque chose, demandez au professeur de vous le rendre.</p>
+  </section>
+
+  <section id="problemes">
+    <h2>Problèmes fréquents</h2>
+    <div>
+      <details><summary>Je ne vois pas le bouton « Installer »</summary>
+        <p>Vérifiez que vous êtes dans Chrome (pas dans l'app Classroom ou Gmail). Ouvrez le lien dans un nouvel onglet Chrome, puis passez par le menu <kbd>⋮</kbd>. Si l'app est déjà installée, Chrome propose plutôt « Ouvrir dans Dossier TP ».</p></details>
+      <details><summary>La page Google dit « Connexion impossible »</summary>
+        <ul><li>« réservée aux comptes de l'école » : vous êtes connecté avec un compte personnel. Changez de compte Google.</li>
+          <li>« accès bloqué » : parlez-en au professeur.</li></ul></details>
+      <details><summary>Après « Ouvrir Dossier TP », l'app me redemande de me connecter</summary>
+        <p>Fermez complètement l'app, puis rouvrez-la. Si cela ne suffit pas, refaites la connexion depuis l'app installée (et pas depuis un onglet Chrome).</p></details>
+      <details><summary>« Votre connexion a expiré »</summary>
+        <p>Cela arrive après 180 jours. Reconnectez-vous comme la première fois (il faut internet).</p></details>
+      <details><summary>L'app ne se met pas à jour</summary>
+        <p>Les mises à jour arrivent toutes seules, au deuxième démarrage avec internet. Pour forcer : fermez l'app et rouvrez-la deux fois.</p></details>
+      <details><summary>Le bouton « Remettre le dossier » ne fonctionne pas</summary>
+        <p>Il faut une connexion internet. Si le message parle d'un dossier « déjà remis », c'est qu'il est bien arrivé chez le professeur.</p></details>
+    </div>
+  </section>
+
+  <section id="profs" class="prof-zone">
+    <h2>Pour les professeurs</h2>
+    <p class="lead">Connectez-vous avec votre adresse <b>prénom.nom@elmarche.be</b>. Votre adresse doit figurer dans l'onglet <b>Profs</b> du Google Sheet « Dossier TP – données ».</p>
+    <ul class="plain">
+      <li><b>Mes élèves</b> : un tableau avec chaque élève et l'état de chaque TP (en cours, remis). Cliquez sur une case pour ouvrir son dossier et sa photo. Ce que vous y modifiez n'est pas enregistré.</li>
+      <li><b>Valider la planche</b> : dans le dossier TP 0 d'un élève, feuille Bon de commande, cliquez sur « Valider cette liste ». Ce matériel sera repris d'office dans ses bons de commande suivants.</li>
+      <li><b>Rendre un dossier</b> : dans la feuille Remise d'un dossier remis, « Rendre le dossier à l'élève » lui permet de le corriger.</li>
+      <li><b>Catalogue</b> : modifiez les prix, ajoutez un article ou cachez-le aux élèves. Les changements partent dans l'onglet Catalogue et s'appliquent chez tous.</li>
+      <li><b>Ajouter un collègue</b> : son adresse dans l'onglet <b>Profs</b>. <b>Bloquer un élève</b> : son adresse dans l'onglet <b>Bloqués</b>.</li>
+      <li><b>Aperçu</b> : « Exercices » montre un TP tel que le voit un élève, sans rien enregistrer.</li>
+    </ul>
+    <p class="note prof">Les photos des élèves sont rangées dans le dossier Drive « Dossier TP – photos des élèves », et chaque dossier dans l'onglet <b>Dossiers</b> du Google Sheet.</p>
+  </section>
+</main>
+
+<footer class="wrap"><span>Dossier TP · Institut Saint-Roch · Marche-en-Famenne</span><span>Créé par Lesenfants Olivier</span></footer>
+</body>
+</html>

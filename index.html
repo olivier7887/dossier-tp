@@ -121,6 +121,8 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .topnav { display: flex; gap: 4px; margin-left: 8px; flex-wrap: wrap; }
 .topnav button { background: none; border: 0; padding: 7px 12px; border-radius: 7px; font-weight: 500; color: var(--muted); }
 .topnav button:hover { color: var(--ink); background: var(--surface-2); }
+.topnav .navlink { padding: 7px 12px; border-radius: 7px; font-weight: 500; color: var(--muted); text-decoration: none; }
+.topnav .navlink:hover { color: var(--ink); background: var(--surface-2); }
 .topnav button.on { color: var(--ink); background: var(--surface-2); box-shadow: inset 0 -2px 0 var(--accent); }
 .who { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .who-name { font-weight: 600; }
@@ -434,9 +436,9 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=1"></script>
-<script src="editors.js?v=1"></script>
-<script src="app.js?v=1"></script>
+<script src="data.js?v=2"></script>
+<script src="editors.js?v=2"></script>
+<script src="app.js?v=2"></script>
 
 </body>
 </html>

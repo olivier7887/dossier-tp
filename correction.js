@@ -298,7 +298,7 @@ function corrigerCablage(ex, v, st) {
    2. Schéma de principe
    ========================================================= */
 function corrigerPrincipe(ex, v, st) {
-  st = st || {};
+  st = migrerPrincipe(st || {});
   const syms = st.syms || [], wires = st.wires || [];
   if (!syms.length) return [{ g: 'erreur', msg: 'Le schéma de principe est vide.' }];
   const F = [];

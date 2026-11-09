@@ -124,7 +124,7 @@ async function flushDirty() {
 }
 function normEx(d) {
   d = d || {};
-  d.principe ||= {}; d.unifilaire ||= {}; d.cablage ||= {}; d.bdc ||= { lignes: [], tva: '', justif: '' };
+  d.principe ||= {}; migrerPrincipe(d.principe); d.unifilaire ||= {}; d.cablage ||= {}; d.bdc ||= { lignes: [], tva: '', justif: '' };
   d.bdc.lignes ||= []; d.outils ||= {}; d.etapes ||= {};
   return d;
 }
@@ -1115,7 +1115,7 @@ function ficheIllus(f) {
     ${type !== 'lampe' ? `<figure><svg viewBox="-42 -42 84 84" class="real-svg" aria-hidden="true" data-meca="${type}"></svg><figcaption>Mécanisme et bornes</figcaption></figure>` : `<figure><svg viewBox="-36 -36 72 72" class="real-svg" aria-hidden="true" data-douille="1"></svg><figcaption>Douille et bornes</figcaption></figure>`}</div>`;
 }
 function drawIllus(root) {
-  root.querySelectorAll('[data-psym]').forEach(s => drawPrincipeSymbol(s, s.dataset.psym, 0, 0, 0, 1));
+  root.querySelectorAll('[data-psym]').forEach(s => drawPrincipeSymbol(s, s.dataset.psym, 0, 0, 0, symFit(s.dataset.psym, 66, 74)));
   root.querySelectorAll('[data-meca]').forEach(s => drawMechanism(s, s.dataset.meca, 0, 0, 'reel'));
   root.querySelectorAll('[data-douille]').forEach(s => drawDouille(s, 0, -6, 'reel'));
 }

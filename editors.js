@@ -105,7 +105,7 @@ function drawMechanism(g, type, cx, cy, view) {
       S('rect', { x: cx - 24, y: cy - 6, width: 48, height: 16, rx: 2.5, class: 'meca-win' }, f);
       S('rect', { x: cx - 21, y: cy - 3.5, width: 7, height: 11, rx: 2.5, class: 'meca-key' }, f);
       S('rect', { x: cx + 14, y: cy - 3.5, width: 7, height: 11, rx: 2.5, class: 'meca-key' }, f);
-      drawPrincipeSymbol(f, type, cx, cy + 2, 0, SYM_P[type] && SYM_P[type].large ? 0.14 : 0.18);
+      drawPrincipeSymbol(f, type, cx, cy + 2, 0, symFit(type, 24, 13));
       S('rect', { x: cx - 8, y: cy + 14, width: 6, height: 9, class: 'meca-win' }, f);
       S('rect', { x: cx + 2, y: cy + 14, width: 6, height: 9, class: 'meca-win' }, f);
     }
@@ -116,8 +116,9 @@ function drawMechanism(g, type, cx, cy, view) {
   } else {
     const f = S('g', { class: 'sym-dev' }, g);
     S('rect', { x: cx - 30, y: cy - 28, width: 60, height: 56, rx: 3, class: 'symdev-box' }, f);
-    drawPrincipeSymbol(f, type === 'prise' ? 'prise' : type, cx, cy + 1, 0, 0.5);
-    T(f, cx + 27, cy + 25, A.court, { class: 'symdev-lbl', 'text-anchor': 'end' });
+    drawPrincipeSymbol(f, type, cx, cy + 3, 0, symFit(type, 50, 26));
+    // appareils à bornes en bas (6/2, 6+6) : étiquette courte pour ne pas couvrir 1' et 2'
+    T(f, cx + 27, cy + 25, A.bornes.some(b => b[2] > 0) ? A.court.replace('Sch ', '') : A.court, { class: 'symdev-lbl', 'text-anchor': 'end' });
   }
   for (const [id, bx, by, aff] of A.bornes) {
     // bornes du bas (1', 2') : étiquette sous la borne
@@ -560,18 +561,70 @@ function renderPosition(host) {
 /* =========================================================
    2. SYMBOLES DE PRINCIPE + ÉDITEUR
    ========================================================= */
-const SYM_P = {
-  sch1: { terms: [[0, -30], [0, 30]], nom: 'Interrupteur simple' },
-  sch2: { terms: [[-15, -30], [-15, 30], [15, -30], [15, 30]], nom: 'Interrupteur bipolaire' },
-  sch5: { terms: [[-15, -30], [15, -30], [0, 30]], nom: 'Interrupteur série' },
-  sch6: { terms: [[-12, -30], [12, -30], [0, 30]], nom: 'Va-et-vient' },
-  sch7: { terms: [[-12, -30], [12, -30], [-12, 30], [12, 30]], nom: 'Permutateur' },
-  // bornes dans l'ordre : L1, 1, 1', L2, 2, 2'
-  sch62: { terms: [[-16, 30], [-26, -30], [-6, -30], [16, 30], [6, -30], [26, -30]], nom: 'Va-et-vient bipolaire', large: true },
-  sch66: { terms: [[-16, 30], [-26, -30], [-6, -30], [16, 30], [6, -30], [26, -30]], nom: 'Va-et-vient double', large: true },
-  lampe: { terms: [[0, -30], [0, 30]], nom: 'Lampe' },
-  prise: { terms: [[-10, -30], [10, -30], [0, 30]], nom: 'Prise 2P+T' },
+/* Symboles du schéma de principe : mêmes dessins que le Banc de câblage
+   (coordonnées du banc, bornes à ± 40), affichés à l'échelle 0,75 (bornes à ± 30).
+   L'ordre des bornes (pins) est celui utilisé par la correction automatique. */
+const BANC_K = 0.75;
+const bLn = (x1, y1, x2, y2, c) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${c ? ` class="${c}"` : ''}/>`;
+const bBlade = x => bLn(x, -40, x, -14) + bLn(x, 14, x, 40) + bLn(x, 14, x - 13, -16, 'bl');                // contact ouvert (repos)
+const bMan = (xb, xe, vx) => `<path d="M${xb + 5},-8 H${xb} V8 H${xb + 5}"/>` + bLn(xb, 0, xe, 0, 'dash') + `<path class="thin" d="M${vx - 3},2 L${vx},6 L${vx + 3},2"/>`;
+const bVV = ox => bLn(ox, -40, ox, -18) + bLn(ox - 20, 40, ox - 20, 18) + bLn(ox + 20, 40, ox + 20, 20) + bLn(ox, -18, ox - 19, 17, 'bl');
+const BANC_SYM = {
+  sch1: { pins: [[0, -40], [0, 40]], box: [-38, -40, 60, 80], draw: () => bBlade(0) + bMan(-28, -6, -10) },
+  sch2: { pins: [[-20, -40], [-20, 40], [20, -40], [20, 40]], box: [-56, -40, 86, 80], draw: () => bBlade(-20) + bBlade(20) + bMan(-48, 14, -30) },
+  // ordre : 1, 2, commun
+  sch5: { pins: [[-20, 40], [40, 40], [-20, -40]], box: [-52, -40, 100, 80], draw: () => bBlade(-20) + bBlade(40) + bLn(-20, -40, 40, -40) + '<circle cx="40" cy="-40" r="3" class="tdot"/>' + bMan(-48, -26, -30) + bMan(12, 34, 30) },
+  // ordre : 1, 1', commun
+  sch6: { pins: [[-20, 40], [20, 40], [0, -40]], box: [-52, -40, 80, 80], draw: () => bVV(0) + bMan(-46, -10, -15) },
+  sch7: { pins: [[-40, -40], [20, -40], [-20, 40], [40, 40]], box: [-66, -40, 120, 80],
+    draw: () => bLn(-40, -40, -40, -22) + bLn(-40, -22, -30, -22) + bLn(-40, -40, -34, -32) + bLn(-34, -32, 48, -32) + bLn(48, -32, 48, -20) +
+      bLn(20, -40, 20, -22) + bLn(8, -22, 32, -22) + bLn(-20, 40, -20, 20) + bLn(40, 40, 40, 20) + bLn(-20, 20, -31, -20, 'bl') + bLn(40, 20, 31, -20, 'bl') + bMan(-60, 35, -27) },
+  // ordre : L1, 1, 1', L2, 2, 2'
+  sch62: { pins: [[-40, -40], [-60, 40], [-20, 40], [40, -40], [20, 40], [60, 40]], box: [-92, -40, 160, 80], draw: () => bVV(-40) + bVV(40) + bMan(-86, 30, -55) },
+  sch66: { pins: [[-50, -40], [-70, 40], [-30, 40], [50, -40], [30, 40], [70, 40]], box: [-102, -40, 180, 80], draw: () => '<g transform="translate(-10 0)">' + bVV(-40) + bMan(-86, -50, -55) + bVV(60) + bMan(14, 50, 45) + '</g>' },
+  lampe: { pins: [[0, -40], [0, 40]], box: [-28, -40, 56, 80], draw: () => bLn(0, -40, 0, -14) + bLn(0, 14, 0, 40) + '<circle r="14" class="bulb"/>' + bLn(-10, -10, 10, 10) + bLn(-10, 10, 10, -10) },
+  // ordre : L, N, PE
+  prise: { pins: [[-20, -40], [20, -40], [0, -40]], box: [-30, -40, 60, 74],
+    draw: () => bLn(-20, -40, -20, 10) + bLn(20, -40, 20, 10) + bLn(0, -40, 0, -10) + '<circle cy="10" r="20" class="bulb"/>' +
+      '<circle cx="-8" cy="12" r="3" class="tdot"/><circle cx="8" cy="12" r="3" class="tdot"/><rect x="-2.5" y="-10" width="5" height="9" class="tdot"/>' },
 };
+const SYM_NOMS = { sch1: 'Interrupteur simple', sch2: 'Interrupteur bipolaire', sch5: 'Interrupteur série', sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', lampe: 'Lampe', prise: 'Prise 2P+T' };
+const SYM_P = Object.fromEntries(Object.entries(BANC_SYM).map(([k, v]) => [k, {
+  nom: SYM_NOMS[k], terms: v.pins.map(([x, y]) => [x * BANC_K, y * BANC_K]),
+  box: v.box.map(n => n * BANC_K),
+}]));
+// échelle pour faire tenir un symbole dans une case de w × h
+function symFit(type, w, h) { const b = SYM_P[type].box; return Math.min(1, w / b[2], h / b[3]); }
+// anciennes bornes (avant novembre 2026), pour convertir les schémas déjà dessinés
+const SYM_P_V1 = {
+  sch1: [[0, -30], [0, 30]], sch2: [[-15, -30], [-15, 30], [15, -30], [15, 30]], sch5: [[-15, -30], [15, -30], [0, 30]],
+  sch6: [[-12, -30], [12, -30], [0, 30]], sch7: [[-12, -30], [12, -30], [-12, 30], [12, 30]],
+  sch62: [[-16, 30], [-26, -30], [-6, -30], [16, 30], [6, -30], [26, -30]], sch66: [[-16, 30], [-26, -30], [-6, -30], [16, 30], [6, -30], [26, -30]],
+  lampe: [[0, -30], [0, 30]], prise: [[-10, -30], [10, -30], [0, 30]],
+};
+function migrerPrincipe(st) {
+  if (!st || st.v === 2) return st;
+  st.v = 2;
+  const syms = st.syms || [], wires = st.wires || [];
+  if (!syms.length || !wires.length) return st;
+  const place = (terms, sy) => terms.map(([x, y]) => { const [rx, ry] = rotPt(x, y, sy.rot || 0); return [sy.x + rx, sy.y + ry]; });
+  const corr = [];
+  for (const sy of syms) {
+    if (!SYM_P_V1[sy.type] || !SYM_P[sy.type]) continue;
+    const A = place(SYM_P_V1[sy.type], sy), B = place(SYM_P[sy.type].terms, sy);
+    A.forEach((p, i) => corr.push([p, B[i]]));
+  }
+  const proche = (p, q) => Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) < 0.5;
+  for (const w of wires) {
+    if (!w.pts || w.pts.length < 2) continue;
+    const debut = corr.find(([a]) => proche(a, w.pts[0])), fin = corr.find(([a]) => proche(a, w.pts[w.pts.length - 1]));
+    // nouvelle borne → coude → ancienne position : le fil reste raccordé, en segments horizontaux et verticaux
+    if (debut && !proche(debut[0], debut[1])) { const [A, B] = debut; w.pts.splice(0, 0, B, [A[0], B[1]]); }
+    if (fin && !proche(fin[0], fin[1])) { const [A, B] = fin; w.pts.push([A[0], B[1]], B); }
+    w.pts = w.pts.filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1]);
+  }
+  return st;
+}
 function rotPt(x, y, rot) {
   switch ((rot % 360 + 360) % 360) {
     case 90: return [-y, x];
@@ -581,33 +634,8 @@ function rotPt(x, y, rot) {
   }
 }
 function drawPrincipeSymbol(parent, type, cx, cy, rot = 0, sc = 1) {
-  const g = S('g', { transform: `translate(${cx} ${cy}) rotate(${rot}) scale(${sc})`, class: 'psym' }, parent);
-  const L = (d, extra = {}) => S('path', Object.assign({ d, class: 'sym-line' }, extra), g);
-  const blade = (x, yb, yt, dir = -1) => `M${x} ${yb}L${x + dir * 12} ${yt + 2}`;
-  switch (type) {
-    case 'sch1':
-      L('M0 -30V-12M0 30V12'); L(blade(0, 12, -12)); L('M-6 0H-14', { class: 'sym-line thin' }); break;
-    case 'sch2':
-      L('M-15 -30V-12M-15 30V12M15 -30V-12M15 30V12'); L(blade(-15, 12, -12)); L(blade(15, 12, -12));
-      L('M-21 0H9', { class: 'sym-line dash' }); break;
-    case 'sch5':
-      L('M0 30V18M-15 18H15M-15 18V12M15 18V12M-15 -30V-12M15 -30V-12');
-      L(blade(-15, 12, -12)); L(blade(15, 12, -12)); break;
-    case 'sch6':
-      L('M0 30V12M-12 -30V-12M12 -30V-12'); L('M0 12L-11 -11'); S('circle', { cx: 0, cy: 12, r: 1.8, class: 'sym-dot' }, g); break;
-    case 'sch62': case 'sch66':
-      for (const x of [-16, 16]) { L(`M${x} 30V12M${x - 10} -30V-12M${x + 10} -30V-12`); L(`M${x} 12L${x - 9} -11`); S('circle', { cx: x, cy: 12, r: 1.8, class: 'sym-dot' }, g); }
-      if (type === 'sch62') L('M-20 0H12', { class: 'sym-line dash' });
-      break;
-    case 'sch7':
-      L('M-12 -30V-12M12 -30V-12M-12 30V12M12 30V12M-12 12V-12M12 12V-12');
-      L('M-12 12L12 -12M12 12L-12 -12', { class: 'sym-line dash' }); break;
-    case 'lampe':
-      L('M0 -30V-12M0 30V12'); S('circle', { cx: 0, cy: 0, r: 12, class: 'sym-line', fill: 'var(--paper)' }, g);
-      L('M-8.5 -8.5L8.5 8.5M8.5 -8.5L-8.5 8.5'); break;
-    case 'prise':
-      L('M-10 -30V-4M10 -30V-4'); L('M-16 -4A16 16 0 0 0 16 -4'); L('M0 12V30'); L('M-6 30H6', { class: 'sym-line thin' }); break;
-  }
+  const g = S('g', { transform: `translate(${cx} ${cy}) rotate(${rot}) scale(${sc * BANC_K})`, class: 'psym' }, parent);
+  if (BANC_SYM[type]) g.innerHTML = BANC_SYM[type].draw();
   return g;
 }
 
@@ -639,9 +667,9 @@ class PrincipeEditor {
     h.appendChild(bar);
     const pal = document.createElement('div'); pal.className = 'palette sym-palette';
     pal.innerHTML = '<span class="palette-lbl">Symboles :</span>' + Object.entries(SYM_P).map(([k, v]) =>
-      `<button type="button" class="symbtn" data-type="${k}" title="${v.nom}"><svg viewBox="-24 -34 48 68" aria-hidden="true"></svg><span>${v.nom}</span></button>`).join('');
+      `<button type="button" class="symbtn" data-type="${k}" title="${v.nom}"><svg viewBox="${v.box[0] - 3} ${v.box[1] - 3} ${v.box[2] + 6} ${v.box[3] + 6}" style="width:${Math.round((v.box[2] + 6) / (v.box[3] + 6) * 44)}px;height:44px" aria-hidden="true"></svg><span>${v.nom}</span></button>`).join('');
     h.appendChild(pal);
-    pal.querySelectorAll('.symbtn').forEach(b => drawPrincipeSymbol(b.querySelector('svg'), b.dataset.type, 0, 0, 0, SYM_P[b.dataset.type].large ? 0.62 : 0.9));
+    pal.querySelectorAll('.symbtn').forEach(b => drawPrincipeSymbol(b.querySelector('svg'), b.dataset.type, 0, 0, 0, 1));
     const wrap = document.createElement('div'); wrap.className = 'svg-wrap paper-wrap';
     this.svg = S('svg', { viewBox: '0 0 800 500', class: 'paper-svg', role: 'img', 'aria-label': 'Schéma de principe' });
     wrap.appendChild(this.svg); h.appendChild(wrap);
@@ -735,8 +763,8 @@ class PrincipeEditor {
     for (const s of this.st.syms) {
       const sel = this.sel && this.sel.k === 'sym' && this.sel.id === s.id;
       const g = S('g', { class: 'sym' + (sel ? ' sel' : ''), 'data-sym': s.id }, svg);
-      const lg = SYM_P[s.type] && SYM_P[s.type].large ? 6 : 0;
-      S('rect', { x: s.x - 26 - lg, y: s.y - 34, width: 52 + 2 * lg, height: 68, class: 'sym-hit', transform: `rotate(${s.rot} ${s.x} ${s.y})` }, g);
+      const bx = SYM_P[s.type].box;
+      S('rect', { x: s.x + bx[0] - 4, y: s.y + bx[1] - 4, width: bx[2] + 8, height: bx[3] + 8, class: 'sym-hit', transform: `rotate(${s.rot} ${s.x} ${s.y})` }, g);
       drawPrincipeSymbol(g, s.type, s.x, s.y, s.rot);
       for (const t of this.termsOf(s)) S('circle', { cx: t[0], cy: t[1], r: 2.2, class: 'pterm' }, g);
     }
@@ -878,25 +906,31 @@ function drawUniSymbol(g, type, x, y) {
       L(`M${x + 6} ${y - 10}A10 10 0 0 1 ${x + 6} ${y + 10}`);
       L(`M${x + 2} ${y - 13}H${x + 10}`); return 22;
     default: {
-      S('circle', { cx: x + 5, cy: y, r: 4.5, class: 'u-line', fill: 'var(--paper)' }, g);
-      const c = [x + 5, y];
-      if (type === 'sch6' || type === 'sch7' || type === 'sch62' || type === 'sch66') {
-        L(flag(c[0] + 3, c[1] - 3, c[0] + 15, c[1] - 15));
-        L(flag(c[0] - 3, c[1] + 3, c[0] - 15, c[1] + 15));
-        if (type === 'sch7') L(`M${c[0] - 6} ${c[1] - 10}L${c[0] + 6} ${c[1] + 10}`);
-        if (type === 'sch62') L(`M${c[0] + 7} ${c[1] - 11}l4 4M${c[0] - 7} ${c[1] + 11}l-4 -4`);
-        if (type === 'sch66') { L(flag(c[0] + 1, c[1] - 4, c[0] + 5, c[1] - 20)); L(flag(c[0] - 1, c[1] + 4, c[0] - 5, c[1] + 20)); }
-      } else if (type === 'sch5') {
-        L(flag(c[0] + 3, c[1] - 3, c[0] + 15, c[1] - 15));
-        L(flag(c[0] + 1, c[1] - 4, c[0] + 5, c[1] - 20));
-      } else {
-        L(flag(c[0] + 3, c[1] - 3, c[0] + 15, c[1] - 15));
-        if (type === 'sch2') L(`M${c[0] + 7} ${c[1] - 11}l4 4`);
+      // symboles unifilaires de l'école (mêmes dessins que le Banc de câblage)
+      const d = [], C = [];
+      const Ln = (x1, y1, x2, y2) => d.push(`M${x1} ${y1}L${x2} ${y2}`);
+      const up = (cx, n) => { Ln(cx + 3, y - 3, cx + 16, y - 16); Ln(cx + 16, y - 16, cx + 22, y - 16); if (n > 1) Ln(cx + 12, y - 12, cx + 18, y - 12); };
+      const thr = (cx, n) => { up(cx, n); Ln(cx - 3, y + 3, cx - 16, y + 16); Ln(cx - 16, y + 16, cx - 22, y + 16); if (n > 1) Ln(cx - 12, y + 12, cx - 18, y + 12); };
+      let w = 22;
+      switch (type) {
+        case 'sch1': up(x + 5, 1); C.push(x + 5); w = 27; break;
+        case 'sch2': up(x + 5, 2); C.push(x + 5); w = 27; break;
+        case 'sch5': { const c = x + 19; Ln(c - 3, y - 3, c - 14, y - 22); Ln(c - 14, y - 22, c - 19, y - 18); Ln(c + 3, y - 3, c + 14, y - 22); Ln(c + 14, y - 22, c + 19, y - 18); C.push(c); w = 40; break; }
+        case 'sch6': thr(x + 22, 1); C.push(x + 22); w = 44; break;
+        case 'sch62': thr(x + 22, 2); C.push(x + 22); w = 44; break;
+        case 'sch7': { const c = x + 17; Ln(c - 17, y - 17, c + 17, y + 17); Ln(c + 17, y - 17, c - 17, y + 17); Ln(c - 17, y - 17, c - 11, y - 17); Ln(c - 17, y + 17, c - 11, y + 17); Ln(c + 17, y - 17, c + 11, y - 17); Ln(c + 17, y + 17, c + 11, y + 17); C.push(c); w = 36; break; }
+        case 'sch66': thr(x + 22, 1); thr(x + 44, 1); C.push(x + 22, x + 44); w = 66; break;
+        default: up(x + 5, 1); C.push(x + 5); w = 27;
       }
-      return 20;
+      if (d.length) L(d.join(''));
+      for (const cx of C) S('circle', { cx, cy: y, r: 4.5, class: 'u-line', fill: 'var(--paper)' }, g);
+      return w;
     }
   }
 }
+// largeur occupée sur la branche (avant l'espace de 22 entre deux symboles)
+const UNI_W = { lampe: 26, prise: 22, sch1: 27, sch2: 27, sch5: 40, sch6: 44, sch62: 44, sch7: 36, sch66: 66 };
+const uniLargeur = t => UNI_W[t] || 27;
 class UnifilaireEditor {
   constructor(host, state, opts = {}) {
     this.host = host; this.st = state; this.opts = opts;
@@ -980,8 +1014,8 @@ class UnifilaireEditor {
       let x = X + 30;
       const g = S('g', {}, svg);
       const widths = [];
-      for (const t of pt.items) { widths.push(x); x += (t === 'lampe' || t === 'prise' ? 26 : 22) + 22; }
-      const endX = pt.items.length ? x - 22 : X + 40;
+      for (const t of pt.items) { widths.push(x); x += uniLargeur(t) + 14; }
+      const endX = pt.items.length ? x - 14 : X + 40;
       S('path', { d: `M${X} ${y}H${pt.items.length ? widths[widths.length - 1] : endX}`, class: 'u-line' }, g);
       pt.items.forEach((t, k) => {
         const x0 = widths[k];

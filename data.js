@@ -8,7 +8,7 @@
 // prix HTVA en euros ; verif:true = prix repris d'une ancienne liste ou estimé, à contrôler
 // Références : catalogue général Niko 2026 (gamme Niko Original).
 // Prix bruts HTVA : liste de prix Niko Belgique du 01/06/2024 (Q2 2024)
-const NIKO_PRIX = {"170-01100":4.78,"170-01200":8.92,"170-01500":7.28,"170-01600":5.22,"170-01700":10.58,"170-02600":11.95,"170-02200":13.31,"100-62200":16.73,"101-62200":16.21,"170-33100":6.77,"170-32100":6.77,"11-865":1.77,"31-865":1.77,"11-866":1.77,"31-866":1.77,"100-61100":8.19,"100-61200":12.33,"100-61500":11.74,"100-61600":8.64,"100-61700":14.0,"100-62600":16.4,"100-66600":9.59,"100-66100":9.59,"100-61105":3.43,"100-61505":4.46,"100-66601":2.85,"100-66101":2.85,"100-77100":6.94,"100-77500":9.74,"100-76100":2.53,"100-76800":5.0,"100-76700":8.24,"100-76200":5.0,"100-76300":8.24,"101-61100":7.67,"101-61200":11.81,"101-61500":11.22,"101-61600":8.12,"101-61700":13.48,"101-62600":15.88,"101-66600":9.07,"101-66100":9.07,"101-61105":2.91,"101-61505":3.94,"101-66601":2.33,"101-66101":2.33,"101-77100":5.88,"101-77500":8.25,"101-76100":2.14,"101-76800":4.24,"101-76700":6.98,"101-76200":4.24,"101-76300":6.98,"102-61105":4.1,"102-61505":6.7,"102-66601":4.49,"102-66101":4.49,"102-77100":7.65,"102-77500":9.4,"102-76100":4.1,"102-76800":8.21,"102-76700":13.54,"102-76200":8.21,"102-76300":13.54};
+const NIKO_PRIX = {"170-01100":4.78,"170-01200":8.92,"170-01500":7.28,"170-01600":5.22,"170-01700":10.58,"170-02600":11.95,"170-02200":13.31,"170-00000":6.84,"170-05000":14.83,"170-37323":8.42,"100-60010":10.24,"101-60010":9.72,"100-60000":10.5,"101-60000":9.98,"100-65000":19.26,"101-65000":18.74,"100-60005":3.69,"101-60005":3.17,"102-60005":4.57,"100-61507":5.91,"101-61507":5.39,"102-61507":8.87,"100-62200":16.73,"101-62200":16.21,"170-33100":6.77,"170-32100":6.77,"11-865":1.77,"31-865":1.77,"11-866":1.77,"31-866":1.77,"100-61100":8.19,"100-61200":12.33,"100-61500":11.74,"100-61600":8.64,"100-61700":14.0,"100-62600":16.4,"100-66600":9.59,"100-66100":9.59,"100-61105":3.43,"100-61505":4.46,"100-66601":2.85,"100-66101":2.85,"100-77100":6.94,"100-77500":9.74,"100-76100":2.53,"100-76800":5.0,"100-76700":8.24,"100-76200":5.0,"100-76300":8.24,"101-61100":7.67,"101-61200":11.81,"101-61500":11.22,"101-61600":8.12,"101-61700":13.48,"101-62600":15.88,"101-66600":9.07,"101-66100":9.07,"101-61105":2.91,"101-61505":3.94,"101-66601":2.33,"101-66101":2.33,"101-77100":5.88,"101-77500":8.25,"101-76100":2.14,"101-76800":4.24,"101-76700":6.98,"101-76200":4.24,"101-76300":6.98,"102-61105":4.1,"102-61505":6.7,"102-66601":4.49,"102-66101":4.49,"102-77100":7.65,"102-77500":9.4,"102-76100":4.1,"102-76800":8.21,"102-76700":13.54,"102-76200":8.21,"102-76300":13.54};
 const NIKO_PRIX_SOURCE = 'liste de prix brute Niko Belgique du 01/06/2024';
 const COULEURS_NIKO = [
   { code: '100', nom: 'crème' },
@@ -24,6 +24,9 @@ const NIKO_SOCLES = [
   ['170-01700', 'Socle interrupteur permutateur (sch 7), bornes à vis, griffes', 5.60],
   ['170-02600', 'Socle interrupteur va-et-vient double (sch 6+6), bornes à vis, griffes', 6.50],
   ['170-02200', 'Socle interrupteur va-et-vient bipolaire (sch 6/2), bornes à vis, griffes', 13.31],
+  ['170-00000', 'Socle bouton-poussoir N.O. (3 bornes), bornes à vis, griffes', 6.84],
+  ['170-05000', 'Socle double bouton-poussoir N.O. ou N.F., bornes à vis, griffes', 14.83],
+  ['170-37323', 'Élément d\'éclairage à LED ambre 230 V pour bouton-poussoir à voyant (bornes à vis)', 8.42],
   ['170-33100', 'Socle prise 2P+T (28,5 mm), obturateurs, bornes à vis, griffes', 3.90],
   ['170-32100', 'Socle prise 2P+T (21 mm), obturateurs, bornes à vis, griffes', 3.90],
 ];
@@ -36,10 +39,15 @@ const NIKO_COUL = [
   ['61700', 'Interrupteur permutateur complet (sch 7), bornes à vis', 8.12, 'Appareils complets', ['100', '101']],
   ['62600', 'Interrupteur va-et-vient double complet (sch 6+6), bornes à vis', 9.91, 'Appareils complets', ['100', '101']],
   ['62200', 'Interrupteur va-et-vient bipolaire complet (sch 6/2), bornes à vis', 16.21, 'Appareils complets', ['100', '101']],
+  ['60010', 'Bouton-poussoir N.O. complet, bornes à vis', 9.72, 'Appareils complets', ['100', '101']],
+  ['60000', 'Bouton-poussoir N.O. complet avec petit voyant transparent (élément LED en plus), bornes à vis', 9.98, 'Appareils complets', ['100', '101']],
+  ['65000', 'Double bouton-poussoir N.O. ou N.F. complet, bornes à vis', 18.74, 'Appareils complets', ['100', '101']],
   ['66600', 'Prise 2P+T complète (28,5 mm), obturateurs, bornes à vis', 5.40, 'Appareils complets', ['100', '101']],
   ['66100', 'Prise 2P+T complète (21 mm), obturateurs, bornes à vis', 5.40, 'Appareils complets', ['100', '101']],
   ['61105', 'Set de finition, touche simple (sch 1, 2, 6, 6/2, 7)', 1.80, 'Sets de finition', ['100', '101', '102']],
-  ['61505', 'Set de finition, touche double (sch 5, 6+6)', 2.50, 'Sets de finition', ['100', '101', '102']],
+  ['61505', 'Set de finition, touche double (sch 5, 6+6, double BP)', 2.50, 'Sets de finition', ['100', '101', '102']],
+  ['60005', 'Set de finition bouton-poussoir avec petit voyant transparent', 3.17, 'Sets de finition', ['100', '101', '102']],
+  ['61507', 'Set de finition double bouton-poussoir avec deux petits voyants', 5.39, 'Sets de finition', ['100', '101', '102']],
   ['66601', 'Set de finition prise avec terre (28,5 mm)', 1.48, 'Sets de finition', ['100', '101', '102']],
   ['66101', 'Set de finition prise avec terre (21 mm)', 1.48, 'Sets de finition', ['100', '101', '102']],
   ['77100', 'Boîte en saillie simple', 3.80, 'Boîtiers et plaques', ['100', '101', '102']],
@@ -94,6 +102,12 @@ const CATALOGUE = (() => {
   }
   add({ id: 'XVB3G15', cat: 'Fils et câbles', des: 'Câble XVB-F2 3G1,5 mm²', ref: 'XVB-F2 3G1,5', unite: 'm', prix: 0.50 });
   add({ id: 'XVB3G25', cat: 'Fils et câbles', des: 'Câble XVB-F2 3G2,5 mm²', ref: 'XVB-F2 3G2,5', unite: 'm', prix: 0.57 });
+  // Modulaires sur rail DIN (Hager) : prix indicatifs à vérifier
+  add({ id: 'EPN510', cat: 'Modulaires (rail DIN)', des: 'Télérupteur 16 A 1F, bobine 230 V, 1 module', ref: 'EPN510', marque: 'Hager', prix: 38.00 });
+  add({ id: 'EMN001', cat: 'Modulaires (rail DIN)', des: 'Minuterie d\'escalier 16 A, 0,5–10 min, 3 ou 4 fils, 1 module', ref: 'EMN001', marque: 'Hager', prix: 52.00 });
+  add({ id: 'EEN100', cat: 'Modulaires (rail DIN)', des: 'Interrupteur crépusculaire 1 voie, 1 module, cellule en saillie fournie', ref: 'EEN100', marque: 'Hager', prix: 88.00 });
+  add({ id: 'EG071', cat: 'Modulaires (rail DIN)', des: 'Interrupteur horaire digital 1 canal, 1 inverseur 16 A, 1 module', ref: 'EG071', marque: 'Hager', prix: 92.00 });
+  add({ id: 'RAILDIN', cat: 'Modulaires (rail DIN)', des: 'Rail DIN 35 mm perforé (le mètre)', ref: 'rail DIN 35', unite: 'm', prix: 4.50 });
   // Protection
   add({ id: 'DJ2P10', cat: 'Protection', des: 'Disjoncteur bipolaire 10 A', ref: '060 73', marque: 'Legrand', prix: 4.61 });
   add({ id: 'DJ2P16', cat: 'Protection', des: 'Disjoncteur bipolaire 16 A', ref: '060 75', marque: 'Legrand', prix: 4.61 });
@@ -101,7 +115,7 @@ const CATALOGUE = (() => {
   return list;
 })();
 
-const CAT_ORDER = ['Socles (mécanismes)', 'Sets de finition', 'Appareils complets', 'Boîtiers et plaques', 'Éclairage', 'Connexions', 'Planche et canalisations', 'Fils et câbles', 'Protection'];
+const CAT_ORDER = ['Socles (mécanismes)', 'Sets de finition', 'Appareils complets', 'Modulaires (rail DIN)', 'Boîtiers et plaques', 'Éclairage', 'Connexions', 'Planche et canalisations', 'Fils et câbles', 'Protection'];
 
 /* ---------- Outillage ---------- */
 const OUTILLAGE = [
@@ -148,6 +162,9 @@ const PLANCHE = (() => {
     { id: 'B1', kind: 'double', x: 40, y: 402, w: 87, h: 158 },
     { id: 'B2', kind: 'simple', x: 356.5, y: 402, w: 87, h: 87 },
     { id: 'B3', kind: 'double', x: 673, y: 402, w: 87, h: 158 },
+    // rails DIN (montés seulement pour les exercices avec modulaires)
+    { id: 'RG', kind: 'rail', x: 150, y: 432, w: 190, h: 76 },
+    { id: 'RD', kind: 'rail', x: 460, y: 432, w: 190, h: 76 },
   ];
   // tubes : de la bouche de l'élément vers l'opercule de la boîte
   const oT = box.y + 17.5, oB = box.y + box.h - 17.5;   // opercules haut / bas des côtés
@@ -159,6 +176,9 @@ const PLANCHE = (() => {
     B2:  { d: 20, r: 0, pts: [[400, 402], [400, box.y + box.h]] },
     B3:  { d: 20, r: 100, pts: [[716.5, 402], [716.5, oB], [box.x + box.w, oB]] },
     ALIM:{ d: 16, r: 0, pts: [[14, cy], [box.x, cy]] },
+    // vers les rails DIN : opercules gauche et droit du bas de la boîte
+    RG:  { d: 16, r: 40, pts: [[245, 420], [245, 362], [box.x + 17.5, 362], [box.x + 17.5, box.y + box.h]], rail: true },
+    RD:  { d: 16, r: 40, pts: [[555, 420], [555, 362], [box.x + box.w - 17.5, 362], [box.x + box.w - 17.5, box.y + box.h]], rail: true },
   };
   // positions d'appareillage (mécanismes)
   const positions = [
@@ -173,7 +193,13 @@ const PLANCHE = (() => {
     { id: 'PL2', cx: 400, cy: 87.5, nom: 'point lumineux central' },
     { id: 'PL3', cx: 712.5, cy: 87.5, nom: 'point lumineux droit' },
   ];
-  return { W, H, box, elements, tubes, positions, points };
+  // emplacements de modules sur les rails (largeur dessinée : 30 mm par module, pour la lisibilité)
+  const railSlots = [];
+  for (const [el, x0, nom] of [['RG', 155, 'rail DIN gauche'], ['RD', 465, 'rail DIN droit']]) {
+    for (let k = 0; k < 6; k++) railSlots.push({ id: `${el}-${k + 1}`, el, kind: 'rail', cx: x0 + 15 + 30 * k, cy: 470, nom: `${nom}, module ${k + 1}` });
+  }
+  const slots = [...positions, ...railSlots];
+  return { W, H, box, elements, tubes, positions, points, railSlots, slots };
 })();
 
 /* ---------- Appareils de l'éditeur de câblage ---------- */
@@ -189,6 +215,18 @@ const APPAREILS = {
   sch7:  { nom: 'Interrupteur permutateur', court: 'Sch 7', socle: '170-01700', bornes: [['a', BX[0], BY, '✱'], ['b', BX[1], BY, '✱'], ['c', BX[2], BY, '✱'], ['d', BX[3], BY, '✱']], vides: [] },
   sch62: { nom: 'Interrupteur va-et-vient bipolaire', court: 'Sch 6/2', socle: '170-02200', bornes: [['L1', BX[0], BY], ['1', BX[1], BY], ['2', BX[2], BY], ['L2', BX[3], BY], ["1'", -5, 18.5], ["2'", 5, 18.5]], vides: [] },
   sch66: { nom: 'Interrupteur va-et-vient double', court: 'Sch 6+6', socle: '170-02600', bornes: [['L1', BX[0], BY], ['1', BX[1], BY], ['2', BX[2], BY], ['L2', BX[3], BY], ["1'", -5, 18.5], ["2'", 5, 18.5]], vides: [] },
+  // boutons-poussoirs Niko (catalogue 2026, p. 4.A-33 à 4.A-35 et 4.D-26)
+  bp:    { nom: 'Bouton-poussoir', court: 'BP', socle: '170-00000', bornes: [['L', BX[0], BY], ['1', BX[1], BY], ['0', BX[3], BY]], vides: [2] },
+  bpv:   { nom: 'Bouton-poussoir à voyant', court: 'BP voyant', socle: '170-00000', bornes: [['L', BX[0], BY], ['1', BX[1], BY], ['0', BX[3], BY]], vides: [2] },
+  bp2:   { nom: 'Double bouton-poussoir', court: 'Double BP', socle: '170-05000', bornes: [['L1', BX[0], BY], ['1', BX[1], BY], ['2', BX[2], BY], ['L2', BX[3], BY], ["1'", -5, 18.5], ["2'", 5, 18.5]], vides: [] },
+  // modulaires Hager sur rail DIN : bornes en haut (y = -28) et en bas (y = 28) du module.
+  // EPN510 : A1-A2 bobine, 1-2 contact. EG071 : L, N, contact 1-2-3 (2 = commun, 2-3 = marche).
+  // EMN001 et EEN100 : marquage à confirmer sur l'appareil de l'atelier.
+  tl:    { nom: 'Télérupteur', court: 'TL', rail: true, ref: 'EPN510', bornes: [['A1', -7, -28], ['1', 7, -28], ['A2', -7, 28], ['2', 7, 28]] },
+  min4:  { nom: 'Minuterie (montage 4 fils)', court: 'Minuterie', rail: true, ref: 'EMN001', bornes: [['L', -7, -28], ['N', 7, -28], ['BP', -7, 28, 'BP'], ['LA', 7, 28, '⊗']] },
+  min3:  { nom: 'Minuterie (montage 3 fils)', court: 'Minuterie', rail: true, ref: 'EMN001', bornes: [['L', -7, -28], ['N', 7, -28], ['BP', -7, 28, 'BP'], ['LA', 7, 28, '⊗']] },
+  crep:  { nom: 'Interrupteur crépusculaire', court: 'Crépusc.', rail: true, ref: 'EEN100', bornes: [['L', -7, -28], ['N', 7, -28], ['1', -7, 28], ['2', 7, 28]] },
+  horl:  { nom: 'Interrupteur horaire', court: 'Horloge', rail: true, ref: 'EG071', bornes: [['L', -7, -28], ['N', 7, -28], ['1', -9, 28], ['2', 0, 28], ['3', 9, 28]] },
   prise: { nom: 'Prise de courant 2P+T', court: 'PC', socle: '170-33100', bornes: [['L', BX[0], BY], ['⏚', 0, BY - 1], ['N', BX[3], BY]], vides: [] },
   douille: { nom: 'Douille E27 sur rosace', court: 'Douille', bornes: [['N', -17, 27], ['L', 0, 27], ['⏚', 17, 27]] },
 };
@@ -244,7 +282,11 @@ const EXERCICES = [
 // Dans ex.cmd[i], une charge est un n° de lampe (0, 1, 2) ou 'p' + index de la prise dans ex.devices
 // (prise commandée). Appareils à deux touches (sch 5, sch 6+6) : ex.touches[i] = [[touche 1], [touche 2]].
 const VV_TYPES = ['sch6', 'sch7', 'sch62', 'sch66'];
-const DEUX_TOUCHES = ['sch5', 'sch66'];
+const DEUX_TOUCHES = ['sch5', 'sch66', 'bp2'];
+const BP_TYPES = ['bp', 'bpv', 'bp2'];                 // commandent l'entrée d'un télérupteur ou d'une minuterie
+const IMPULSION = ['tl', 'min4', 'min3'];              // appareils commandés par boutons-poussoirs (charge 'i' + index)
+const AUTO_TYPES = ['crep', 'horl'];                   // commande automatique ; les deux peuvent être en série
+const estRail = t => !!(APPAREILS[t] && APPAREILS[t].rail);
 function touchesDe(ex, i) {
   const t = ex.touches && ex.touches[i];
   if (t) return [0, 1].slice(0, DEUX_TOUCHES.includes(ex.devices[i]) ? 2 : 1).map(k => (t[k] || []).slice());
@@ -258,6 +300,8 @@ function commandePar(ex, charge) { // [[index appareil, touche], …]
   return r;
 }
 function chargesEx(ex) { return [...Array(ex.lampes || 0).keys(), ...ex.devices.map((t, i) => t === 'prise' ? 'p' + i : null).filter(x => x !== null)]; }
+// entrées d'impulsion (bobine du télérupteur, entrée poussoirs de la minuterie)
+function entreesEx(ex) { return ex.devices.map((t, i) => IMPULSION.includes(t) ? 'i' + i : null).filter(x => x !== null); }
 function prisesCommandees(ex) { return ex.devices.map((t, i) => t === 'prise' && commandePar(ex, 'p' + i).length ? i : null).filter(x => x !== null); }
 // groupes de va-et-vient : appareils (sch 6, 7, 6/2, 6+6) qui commandent ensemble une même charge ; ils doivent être dans des boîtiers différents
 function groupesVV(ex) {
@@ -351,6 +395,33 @@ const FICHES = [
 <ul><li>3 bornes : phase, neutre et <b>terre</b> (⏚). La terre est toujours raccordée (code 1218).</li>
 <li>Un circuit de prises se câble en <b>2,5 mm²</b> minimum (code 1806).</li>
 <li><b>Prise commandée</b> : une prise peut être commandée par un interrupteur (lampe de chevet, guirlande…). La phase passe alors par l'interrupteur, comme pour une lampe ; le neutre et la terre arrivent directement.</li></ul>` },
+  { id: 'app-bp', cat: 'Appareils', titre: 'Boutons-poussoirs (simple, à voyant, double)', sym: 'bp',
+    html: `<p>Un bouton-poussoir ferme le circuit <strong>seulement pendant l'appui</strong> et revient seul au repos. Il ne commande jamais une lampe directement : il envoie une impulsion à un <b>télérupteur</b> ou à une <b>minuterie</b>.</p>
+<ul><li>Socle Niko 170-00000 : bornes <b>L</b> (phase) et <b>1</b> (départ vers la bobine A1 ou l'entrée BP de la minuterie).</li>
+<li><b>Poussoir à voyant</b> : même socle, avec l'élément d'éclairage à LED <b>170-37323</b> à commander en plus. Le voyant a besoin du <b>neutre</b>, amené sur la borne <b>0</b> : il reste allumé et permet de repérer le poussoir dans le noir.</li>
+<li><b>Double poussoir</b> (socle 170-05000) : deux poussoirs indépendants dans un seul appareil, bornes L1 · 1 · 2 · L2 en haut et 1' · 2' en bas.</li>
+<li>Plusieurs poussoirs se raccordent <b>en parallèle</b> : tous reçoivent la phase sur L, et toutes les bornes 1 vont ensemble vers la bobine.</li>
+<li>Sets de finition : touche simple 1xx-60005, touche double 1xx-61507.</li></ul>` },
+  { id: 'app-tl', cat: 'Appareils', titre: 'Télérupteur (Hager EPN510)', sym: 'tl',
+    html: `<p>Un relais « bistable » posé sur le rail DIN. Chaque impulsion sur sa bobine fait <strong>changer d'état</strong> son contact : une impulsion allume, la suivante éteint. On le commande depuis autant d'endroits que l'on veut, avec des boutons-poussoirs en parallèle.</p>
+<ul><li>Bornes de la <b>bobine</b> : <b>A1</b> (reçoit la phase par les poussoirs) et <b>A2</b> (au neutre).</li>
+<li>Bornes du <b>contact</b> : <b>1</b> (phase en permanence) et <b>2</b> (départ vers les lampes).</li>
+<li>La bobine ne doit être alimentée que <b>pendant l'appui</b> : si A1 reçoit la phase en permanence, elle chauffe et grille.</li>
+<li>Avantage sur le va-et-vient : on ajoute un point de commande avec un simple poussoir et deux fils, sans navette.</li></ul>` },
+  { id: 'app-modulaires', cat: 'Appareils', titre: 'Minuterie, crépusculaire et horloge (rail DIN)', sym: 'min4',
+    html: `<p>Ces appareils modulaires Hager se posent sur le <b>rail DIN</b> de la planche (à gauche ou à droite, entre le boîtier double et le simple). Ils ont tous besoin d'une <strong>alimentation permanente</strong> : la phase sur <b>L</b> et le neutre sur <b>N</b>, en direct, sans passer par un interrupteur.</p>
+<h3>Minuterie d'escalier (EMN001)</h3>
+<ul><li>Une impulsion sur un poussoir allume l'éclairage pendant un temps réglé, puis il s'éteint seul.</li>
+<li>Bornes : <b>L</b>, <b>N</b>, <b>BP</b> (entrée des poussoirs) et <b>⊗</b> (départ vers les lampes).</li>
+<li><b>Câblage 4 fils</b> : les poussoirs reçoivent la phase et la renvoient sur la borne BP. Les lampes sont seulement sur ⊗.</li>
+<li><b>Câblage 3 fils</b> : les poussoirs sont raccordés entre la phase et le fil qui part vers les lampes (borne ⊗, reliée à la borne BP). Un appui allume directement les lampes et lance la temporisation. Un fil de moins entre les boîtiers, mais un poussoir bloqué laisse l'éclairage allumé.</li></ul>
+<h3>Interrupteur crépusculaire (EEN100)</h3>
+<ul><li>Il ferme son contact <b>1 → 2</b> quand la lumière du jour baisse sous le seuil réglé, et l'ouvre au lever du jour.</li>
+<li>La cellule se place à l'extérieur, à l'abri du soleil direct et de l'éclairage qu'elle commande (sur la planche, elle n'est pas câblée).</li></ul>
+<h3>Interrupteur horaire (EG071)</h3>
+<ul><li>Une horloge à programmes qui bascule son inverseur aux heures choisies. Contact : commun <b>2</b>, <b>3</b> fermé pendant la plage programmée, <b>1</b> fermé hors plage.</li>
+<li><b>Horloge + crépusculaire en série</b> : l'éclairage extérieur s'allume à la tombée de la nuit et s'éteint à l'heure programmée (par exemple 23 h), au lieu de rester allumé toute la nuit.</li></ul>
+<p class="muted">Le marquage exact des bornes de la minuterie et du crépusculaire est à vérifier sur les modules de l'atelier.</p>` },
   { id: 'app-douille', cat: 'Appareils', titre: 'Douille E27 et rosace', sym: 'lampe',
     html: `<p>La douille (« socket ») est vissée sur la rosace en bois de 95 × 95 mm.</p>
 <ul><li>Le <b>neutre</b> va sur la languette verticale, la <b>phase</b> (le retour) sur le plot central : en changeant l'ampoule, on ne touche pas la phase.</li>

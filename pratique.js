@@ -32,6 +32,7 @@ const VAL = { cont: 'Continuité (≈ 0 Ω, bip)', ol: 'OL (pas de continuité)'
 function lampesDe(ex, v) {
   return chargesEx(ex).map(ch => {
     const parT = commandePar(ex, ch), par = [...new Set(parT.map(([i]) => i))];
+    par.filter(i => ex.devices[i] === 'min3').forEach(i => commandePar(ex, 'i' + i).forEach(([j]) => { if (!par.includes(j)) par.push(j); }));
     const vv = par.length > 1 && par.some(i => VV_TYPES.includes(ex.devices[i]));
     if (typeof ch === 'string') {
       const d = v.devices[+ch.slice(1)];
@@ -46,7 +47,9 @@ function mesuresEssai(ex, v) {
   const R = [], reps = v.devices.map(d => d.rep);
   const lp = lampesDe(ex, v), serie = ex.montage === 'série';
   const prisesPerm = v.devices.filter((d, i) => d.type === 'prise' && !commandePar(ex, 'p' + i).length);
-  R.push({ id: 'iso-ln', txt: 'Ampoules retirées, rien de branché, tous les interrupteurs fermés : entre L et N de l\'arrivée', att: 'ol' });
+  const alims = ex.devices.map((t, i) => i).filter(i => ['min4', 'min3', 'crep', 'horl'].includes(ex.devices[i]));
+  const avecBP = ex.devices.some(t => BP_TYPES.includes(t));
+  R.push({ id: 'iso-ln', txt: `Ampoules retirées, rien de branché${alims.length ? ', neutre des modulaires débranché' : ''}, tous les interrupteurs fermés${avecBP ? ', poussoirs relâchés' : ''} : entre L et N de l'arrivée`, att: 'ol' });
   R.push({ id: 'iso-lpe', txt: 'Tous les interrupteurs fermés : entre L et ⏚ de l\'arrivée', att: 'ol' });
   [...v.lampes.map((l, j) => ['L' + (j + 1), l.nom]), ...v.devices.filter(d => d.type === 'prise').map(p => [p.rep, 'la prise ' + p.rep])]
     .forEach(([k, n]) => R.push({ id: 'pe-' + k, txt: `Conducteur de protection : ⏚ de l'arrivée → ⏚ de ${n}`, att: 'ohm', kind: 'ohm' }));
@@ -63,6 +66,19 @@ function mesuresEssai(ex, v) {
       R.push({ id: 'n-o-' + l.court, txt: `${reps[bip]} ouvert : N de l'arrivée → N de ${l.nom}`, att: 'ol' });
     } else if (vvBip) R.push({ id: 'vvn-' + l.court, txt: `Basculer ${l.par.map(i => reps[i]).join(', puis ')} : la continuité N de l'arrivée → N de ${l.nom} s'établit ou se coupe aussi (coupure bipolaire)`, att: 'conf', kind: 'conf' });
     else R.push({ id: 'n-' + l.court, txt: `Neutre : N de l'arrivée → N de ${l.nom}`, att: 'cont' });
+    const mods = l.par.filter(i => estRail(ex.devices[i]));
+    if (mods.length) {
+      const ES = { tl: ['1', '2'], min4: [null, '⊗'], min3: [null, '⊗'], crep: ['1', '2'], horl: ['2 (commun)', '3'] };
+      const nomM = i => ({ tl: 'du télérupteur ', min4: 'de la minuterie ', min3: 'de la minuterie ', crep: 'du crépusculaire ', horl: "de l'horloge " })[ex.devices[i]] + reps[i];
+      if (mods.length > 1) R.push({ id: 'ser-' + l.court, txt: `Contacts ${mods.map(nomM).join(' et ')} raccordés en série entre la phase et ${l.nom}`, att: 'conf', kind: 'conf' });
+      else {
+        const i = mods[0], [ent, sor] = ES[ex.devices[i]];
+        if (ent) R.push({ id: 'ci-' + l.court, txt: `L de l'arrivée → borne ${ent} ${nomM(i)}`, att: 'cont' });
+        R.push({ id: 'co-' + l.court, txt: `Borne ${sor} ${nomM(i)} → L de ${l.nom}`, att: 'cont' });
+      }
+      if (mods.some(i => ex.devices[i] === 'min3')) l.par.filter(i => BP_TYPES.includes(ex.devices[i])).forEach(i => R.push({ id: 'b3-' + reps[i] + l.court, txt: `${reps[i]} enfoncé : L de l'arrivée → L de ${l.nom}`, att: 'cont' }));
+      return;
+    }
     if (l.vv) R.push({ id: 'vv-' + l.court, txt: `Basculer ${l.par.map(i => reps[i] + toucheTxt(ex, l, i)).join(', puis ')} : à chaque manœuvre, la continuité L de l'arrivée → L de ${l.nom} s'établit ou se coupe`, att: 'conf', kind: 'conf' });
     else {
       const i = l.par[0], t = toucheTxt(ex, l, i);
@@ -70,11 +86,29 @@ function mesuresEssai(ex, v) {
       R.push({ id: 'c-o-' + l.court, txt: `${reps[i]}${t} ouvert : L de l'arrivée → L de ${l.nom}`, att: 'ol' });
     }
   });
+  // entrées d'impulsion (bobine du télérupteur, entrée poussoirs de la minuterie 4 fils)
+  for (const ch of entreesEx(ex)) {
+    const k = +ch.slice(1), t = ex.devices[k];
+    if (t === 'min3') continue;
+    const bps = [...new Set(commandePar(ex, ch).map(([i]) => i))];
+    const borne = t === 'tl' ? `A1 du télérupteur ${reps[k]}` : `BP de la minuterie ${reps[k]}`;
+    bps.forEach(i => R.push({ id: 'ie-' + reps[i] + reps[k], txt: `${reps[i]} enfoncé : L de l'arrivée → ${borne}`, att: 'cont' }));
+    if (bps.length) R.push({ id: 'ir-' + reps[k], txt: `Poussoirs relâchés : L de l'arrivée → ${borne}`, att: 'ol' });
+    if (t === 'tl') R.push({ id: 'a2-' + reps[k], txt: `A2 du télérupteur ${reps[k]} → N de l'arrivée`, att: 'cont' });
+  }
+  // alimentation permanente des modulaires
+  alims.forEach(i => {
+    const nm = ({ min4: 'de la minuterie ', min3: 'de la minuterie ', crep: 'du crépusculaire ', horl: "de l'horloge " })[ex.devices[i]] + reps[i];
+    R.push({ id: 'al-' + reps[i], txt: `L de l'arrivée → borne L ${nm}`, att: 'cont' });
+    R.push({ id: 'an-' + reps[i], txt: `N de l'arrivée → borne N ${nm}`, att: 'cont' });
+  });
   prisesPerm.forEach(p => {
     R.push({ id: 'pl-' + p.rep, txt: `L de l'arrivée → L de la prise ${p.rep}`, att: 'cont' });
     R.push({ id: 'pn-' + p.rep, txt: `N de l'arrivée → N de la prise ${p.rep}`, att: 'cont' });
   });
-  return R;
+  // une même mesure n'est demandée qu'une fois (ex. : contact d'un télérupteur qui alimente deux lampes)
+  const vus = new Set();
+  return R.filter(m => !vus.has(m.txt) && vus.add(m.txt));
 }
 function testsProf(ex, v) {
   const T = [{ id: 'mesures', txt: 'Mesures hors tension faites et correctes avant la mise sous tension' }], reps = v.devices.map(d => d.rep);
@@ -82,9 +116,23 @@ function testsProf(ex, v) {
   const serie = ex.montage === 'série' ? lp.filter(l => !l.prise) : [];
   if (serie.length) T.push({ id: 'serie', txt: `${serie.map(l => l.court).join(' et ')} s'allument ensemble avec ${reps[serie[0].par[0]]} (éclairage plus faible : lampes en série)` });
   lp.filter(l => !(serie.length && !l.prise)).forEach(l => {
+    const mods = l.par.filter(i => estRail(ex.devices[i]));
+    if (mods.length) {
+      const bpsDe = i => [...new Set(commandePar(ex, 'i' + i).map(([j]) => reps[j]))];
+      const txt = mods.map(i => {
+        const t = ex.devices[i];
+        if (t === 'tl') return `${maj1(l.nom)} s'allume à un appui sur ${bpsDe(i).join(' ou ')} et s'éteint à l'appui suivant`;
+        if (t === 'min4' || t === 'min3') return `${maj1(l.nom)} s'allume à un appui sur ${bpsDe(i).join(' ou ')} et s'éteint seule après la temporisation`;
+        if (t === 'crep') return `cellule masquée (nuit simulée), ${l.nom} s'allume ; cellule éclairée, elle s'éteint`;
+        return `horloge en marche forcée, ${l.nom} s'allume ; en arrêt forcé, elle s'éteint`;
+      });
+      T.push({ id: 'l-' + l.court, txt: mods.length > 1 ? `${maj1(l.nom)} ne s'allume que si les deux conditions sont réunies (${txt.join(' ; ')})` : maj1(txt[0]) });
+      return;
+    }
     const qui = l.vv ? 'depuis ' + l.par.map(i => reps[i] + toucheTxt(ex, l, i)).join(' et depuis ') + ', dans toutes les positions' : 'avec ' + reps[l.par[0]] + toucheTxt(ex, l, l.par[0]);
     T.push({ id: 'l-' + l.court, txt: l.prise ? `${majP(l.nom)} est alimentée et coupée ${qui} (testeur de prise), terre raccordée` : `${l.nom} s'allume et s'éteint ${qui}` });
   });
+  v.devices.forEach(d => { if (d.type === 'bpv') T.push({ id: 'vy-' + d.rep, txt: `Le voyant du poussoir ${d.rep} est allumé` }); });
   v.devices.forEach(d => { if (d.type === 'sch2' || d.type === 'sch62') T.push({ id: 'bip-' + d.rep, txt: `${d.rep} en position « éteint » : plus de tension sur la phase ni sur le neutre de la charge (VAT)` }); });
   v.devices.forEach((p, i) => { if (p.type === 'prise' && !commandePar(ex, 'p' + i).length) T.push({ id: 'pc-' + p.rep, txt: `Prise ${p.rep} : tension L–N ≈ 230 V en permanence, terre raccordée (testeur de prise)` }); });
   T.push({ id: 'disj', txt: 'Pas de déclenchement du disjoncteur ni du différentiel, pas d\'échauffement' });

@@ -82,8 +82,27 @@ const ALIM_FILS = [
 ];
 function colorHex(id) { return (COULEURS_FIL.find(c => c.id === id) || COULEURS_FIL[3]).hex; }
 
+function drawModule(g, type, cx, cy, view) {
+  const A = APPAREILS[type];
+  const f = S('g', { class: 'module' }, g);
+  if (view === 'reel') {
+    S('rect', { x: cx - 14, y: cy - 38, width: 28, height: 76, rx: 2, class: 'mod-body' }, f);
+    S('rect', { x: cx - 14, y: cy - 24, width: 28, height: 48, class: 'mod-face' }, f);
+    T(f, cx, cy - 13, A.court, { class: 'mod-txt', 'text-anchor': 'middle' });
+    if (type === 'tl') { S('rect', { x: cx - 4, y: cy - 6, width: 8, height: 14, rx: 1.5, class: 'mod-lever' }, f); }
+    else if (type === 'horl') { S('rect', { x: cx - 10, y: cy - 6, width: 20, height: 11, rx: 1, class: 'mod-lcd' }, f); T(f, cx, cy + 1.8, '12:00', { class: 'mod-lcd-txt', 'text-anchor': 'middle' }); }
+    else { S('circle', { cx, cy: cy + 2, r: 6, class: 'mod-dial' }, f); S('line', { x1: cx, y1: cy + 2, x2: cx + 3.5, y2: cy - 2, class: 'mod-dial-hand' }, f); }
+    T(f, cx, cy + 19, 'hager', { class: 'mod-brand', 'text-anchor': 'middle' });
+  } else {
+    S('rect', { x: cx - 14, y: cy - 38, width: 28, height: 76, rx: 2, class: 'symdev-box' }, f);
+    drawPrincipeSymbol(f, type, cx, cy + 1, 0, symFit(type, 24, 36));
+    T(f, cx, cy + 34, A.court, { class: 'symdev-lbl', 'text-anchor': 'middle' });
+  }
+  for (const [id, bx, by, aff] of A.bornes) T(g, cx + bx, cy + by + (by > 0 ? 9.5 : -6.5), aff || id, { class: 'borne-lbl', 'text-anchor': 'middle' });
+}
 function drawMechanism(g, type, cx, cy, view) {
   const A = APPAREILS[type];
+  if (A.rail) return drawModule(g, type, cx, cy, view);
   if (view === 'reel') {
     // cadre métallique à griffes (dessin générique)
     const f = S('g', { class: 'meca' }, g);
@@ -96,7 +115,13 @@ function drawMechanism(g, type, cx, cy, view) {
     S('circle', { cx: cx + 30.5, cy, r: 2.6, class: 'meca-screw' }, f);
     // socle blanc : rangée de 4 bornes en haut, fenêtre centrale, encoches en bas (style socle Niko)
     S('path', { d: `M${cx - 28} ${cy - 26}h56v40h-6a4 4 0 0 0-8 0v6h-28v-6a4 4 0 0 0-8 0h-6z`, class: 'meca-body' }, f);
-    if (type === 'prise') {
+    if (BP_TYPES.includes(type)) {
+      // poussoir : fenêtre avec bouton rond (deux pour le double poussoir)
+      S('rect', { x: cx - 24, y: cy - 6, width: 48, height: 16, rx: 2.5, class: 'meca-win' }, f);
+      for (const x of type === 'bp2' ? [cx - 10, cx + 10] : [cx]) S('circle', { cx: x, cy: cy + 2, r: 5, class: 'meca-key' }, f);
+      if (type === 'bpv') S('circle', { cx: cx + 15, cy: cy + 2, r: 2.2, class: 'meca-led' }, f);
+      if (type === 'bp2') { S('rect', { x: cx - 8, y: cy + 14, width: 6, height: 9, class: 'meca-win' }, f); S('rect', { x: cx + 2, y: cy + 14, width: 6, height: 9, class: 'meca-win' }, f); }
+    } else if (type === 'prise') {
       S('circle', { cx, cy: cy + 2, r: 10, class: 'meca-socket' }, f);
       S('circle', { cx: cx - 4.5, cy: cy + 2, r: 1.6, class: 'meca-pin' }, f);
       S('circle', { cx: cx + 4.5, cy: cy + 2, r: 1.6, class: 'meca-pin' }, f);
@@ -144,9 +169,15 @@ function drawDouille(g, cx, cy, view) {
 function drawBoardBase(svg, opts = {}) {
   const P = PLANCHE;
   S('rect', { x: 0, y: 0, width: P.W, height: P.H, rx: 4, class: 'board' }, svg);
+  // rails DIN (sous les tubes)
+  if (opts.rails) for (const el of P.elements.filter(e => e.kind === 'rail')) {
+    S('rect', { x: el.x, y: 452.5, width: el.w, height: 35, rx: 1, class: 'din' }, svg);
+    for (let x = el.x + 12; x < el.x + el.w - 6; x += 25) S('rect', { x: x - 6, y: 467, width: 12, height: 6, rx: 3, class: 'din-hole' }, svg);
+  }
   // tubes
   for (const [id, t] of Object.entries(P.tubes)) {
     if (id === 'ALIM' && opts.noAlim) continue;
+    if (t.rail && !opts.rails) continue;
     const c = roundPolyline(t.pts, t.r);
     const g = S('g', { class: 'tube' }, svg);
     S('path', { d: pathD(c), class: 'tube-body', 'stroke-width': t.d }, g);
@@ -155,6 +186,7 @@ function drawBoardBase(svg, opts = {}) {
   }
   // éléments
   for (const el of P.elements) {
+    if (el.kind === 'rail') continue;
     if (el.kind === 'rosace') {
       S('rect', { x: el.x, y: el.y, width: el.w, height: el.h, rx: 2, class: 'rosace' }, svg);
       for (const [dx, dy] of [[9, 9], [el.w - 9, 9], [9, el.h - 9], [el.w - 9, el.h - 9]]) {
@@ -229,12 +261,14 @@ class CablageEditor {
     this.render();
   }
   destroy() { document.removeEventListener('keydown', this._key); }
+  // rails DIN visibles : exercice avec modulaires, ou module déjà posé
+  railsOn() { return !!this.opts.rails || Object.keys(this.st.placed || {}).some(p => /^R[GD]-/.test(p)); }
 
   /* --- positions --- */
   endpointPos(ep) {
     const P = PLANCHE;
     if (ep.k === 'dev') {
-      const pos = P.positions.find(p => p.id === ep.pos);
+      const pos = P.slots.find(p => p.id === ep.pos);
       const b = APPAREILS[this.st.placed[ep.pos]].bornes.find(x => x[0] === ep.t);
       return [pos.cx + b[1], pos.cy + b[2]];
     }
@@ -247,7 +281,7 @@ class CablageEditor {
     if (ep.k === 'alim') { const f = ALIM_FILS.find(f => f.term === ep.t); return [P.box.x + 6, P.box.y + P.box.h / 2 + f.dy]; }
   }
   elemOf(ep) {
-    if (ep.k === 'dev') return PLANCHE.positions.find(p => p.id === ep.pos).el;
+    if (ep.k === 'dev') return PLANCHE.slots.find(p => p.id === ep.pos).el;
     if (ep.k === 'lamp') return ep.pl;
     return null;
   }
@@ -285,6 +319,12 @@ class CablageEditor {
     if (ep.k === 'lamp') {
       const yl = ty + 7 + o * 0.6;
       pts.push([tx, yl], [m[0], yl]);
+    } else if (PLANCHE.slots.find(p => p.id === ep.pos).kind === 'rail') {
+      // module sur rail : vers le haut du module, puis la bouche du tube
+      const pos = PLANCHE.slots.find(p => p.id === ep.pos), elx = PLANCHE.elements.find(e => e.id === el);
+      const yl = elx.y - 4 - Math.abs(o) * 0.5;
+      if (ty < pos.cy) pts.push([tx, yl], [m[0] + o, yl]);
+      else { const lane = (tx < pos.cx ? pos.cx - 15 : pos.cx + 15) + o * 0.3; pts.push([tx, ty + 5], [lane, ty + 5], [lane, yl], [m[0] + o, yl]); }
     } else {
       const pos = PLANCHE.positions.find(p => p.id === ep.pos);
       const elx = PLANCHE.elements.find(e => e.id === el);
@@ -343,7 +383,8 @@ class CablageEditor {
     svg.innerHTML = ''; this.ghost = null;
     svg.setAttribute('viewBox', this.zoom === 'boite' ? '250 170 300 200' : '0 0 800 600');
     svg.dataset.mode = this.mode;
-    drawBoardBase(svg);
+    const rails = this.railsOn();
+    drawBoardBase(svg, { rails });
     // fils d'alimentation (fixes)
     const tA = P.tubes.ALIM;
     for (const f of ALIM_FILS) {
@@ -352,11 +393,18 @@ class CablageEditor {
     }
     T(svg, 18, tA.pts[0][1] - 14, 'Alimentation L · N · PE', { class: 'board-lbl' });
     // emplacements libres + appareils
+    const pickRail = this.pick && estRail(this.pick);
     for (const pos of P.positions) {
       const type = st.placed[pos.id];
       const g = S('g', { class: 'pos', 'data-pos': pos.id }, svg);
       if (type) drawMechanism(g, type, pos.cx, pos.cy, st.view);
-      else S('rect', { x: pos.cx - 33, y: pos.cy - 33, width: 66, height: 66, rx: 4, class: 'slot' + (this.mode === 'placer' && this.pick && this.pick !== 'douille' ? ' slot-on' : '') }, g);
+      else S('rect', { x: pos.cx - 33, y: pos.cy - 33, width: 66, height: 66, rx: 4, class: 'slot' + (this.mode === 'placer' && this.pick && this.pick !== 'douille' && !pickRail ? ' slot-on' : '') }, g);
+    }
+    if (rails) for (const pos of P.railSlots) {
+      const type = st.placed[pos.id];
+      const g = S('g', { class: 'pos', 'data-pos': pos.id }, svg);
+      if (type) drawMechanism(g, type, pos.cx, pos.cy, st.view);
+      else S('rect', { x: pos.cx - 13, y: pos.cy - 36, width: 26, height: 72, rx: 2, class: 'slot' + (this.mode === 'placer' && pickRail ? ' slot-on' : '') }, g);
     }
     for (const pt of P.points) {
       const g = S('g', { class: 'pos', 'data-pl': pt.id }, svg);
@@ -387,7 +435,7 @@ class CablageEditor {
       S('circle', Object.assign({ cx: x, cy: y, r: small ? 2.6 : 6, class: 'hit' }, data), svg);
       return c;
     };
-    for (const pos of P.positions) {
+    for (const pos of P.slots) {
       const type = st.placed[pos.id]; if (!type) continue;
       for (const [lbl, bx, by] of APPAREILS[type].bornes) term(pos.cx + bx, pos.cy + by, { 'data-ep': JSON.stringify({ k: 'dev', pos: pos.id, t: lbl }) });
     }
@@ -418,12 +466,12 @@ class CablageEditor {
     h.querySelectorAll('[data-color]').forEach(b => b.classList.toggle('on', b.dataset.color === this.color));
     h.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === this.st.view));
     h.querySelectorAll('[data-zoom]').forEach(b => b.classList.toggle('on', b.dataset.zoom === this.zoom));
-    const types = ['sch1', 'sch2', 'sch5', 'sch6', 'sch7', 'sch62', 'sch66', 'prise', 'douille'];
+    const types = ['sch1', 'sch2', 'sch5', 'sch6', 'sch7', 'sch62', 'sch66', 'bp', 'bpv', 'bp2', 'prise', ...(this.railsOn() ? ['tl', 'min4', 'min3', 'crep', 'horl'] : []), 'douille'];
     this.palette.hidden = this.mode !== 'placer';
     this.palette.innerHTML = '<span class="palette-lbl">Appareil :</span>' + types.map(t =>
       `<button type="button" class="chip${this.pick === t ? ' on' : ''}" data-type="${t}">${t === 'douille' ? 'Douille E27' : APPAREILS[t].court + ' · ' + APPAREILS[t].nom.replace('Interrupteur ', '')}</button>`).join('');
     const hints = {
-      placer: this.pick ? (this.pick === 'douille' ? 'Cliquez sur une rosace libre pour y poser la douille.' : 'Cliquez sur un emplacement libre (cadre en pointillés) pour y placer l\'appareil.') : 'Choisissez un appareil, puis cliquez sur un emplacement libre.',
+      placer: this.pick ? (this.pick === 'douille' ? 'Cliquez sur une rosace libre pour y poser la douille.' : estRail(this.pick) ? 'Cliquez sur un emplacement libre du rail DIN pour y clipser le module.' : 'Cliquez sur un emplacement libre (cadre en pointillés) pour y placer l\'appareil.') : 'Choisissez un appareil, puis cliquez sur un emplacement libre.',
       fil: this.pending ? 'Cliquez sur la borne d\'arrivée, ou dans la boîte de dérivation pour créer une connexion (borne Wago). Échap pour annuler.' : 'Cliquez sur une borne de départ. Les fils suivent automatiquement les tubes.',
       gomme: 'Cliquez sur un fil, une connexion ou un appareil pour l\'effacer.',
     };
@@ -437,7 +485,7 @@ class CablageEditor {
     }
     const wagos = this.st.nodes.map(n => this.st.wires.filter(w => (w.a.k === 'node' && w.a.id === n.id) || (w.b.k === 'node' && w.b.id === n.id)).length).filter(c => c > 0);
     const w2 = wagos.filter(c => c <= 2).length, w3 = wagos.filter(c => c === 3).length, w5 = wagos.filter(c => c > 3 && c <= 5).length, wx = wagos.filter(c => c > 5).length;
-    const names = { PL1: 'tube PL1', PL2: 'tube PL2', PL3: 'tube PL3', B1: 'tube boîtier gauche', B2: 'tube boîtier central', B3: 'tube boîtier droit' };
+    const names = { PL1: 'tube PL1', PL2: 'tube PL2', PL3: 'tube PL3', B1: 'tube boîtier gauche', B2: 'tube boîtier central', B3: 'tube boîtier droit', RG: 'tube rail gauche', RD: 'tube rail droit' };
     this.summary.innerHTML = `<div><span class="k">Fils par tube</span> ${Object.keys(perTube).length ? Object.entries(perTube).map(([k, v]) => `${names[k]} : <b>${v}</b>`).join(' · ') : '—'}</div>
       <div><span class="k">Connexions dans la boîte</span> ${wagos.length ? `${wagos.length} point(s) : ${w2 ? w2 + ' × 2 fils ' : ''}${w3 ? w3 + ' × 3 fils ' : ''}${w5 ? w5 + ' × 4–5 fils ' : ''}${wx ? `<span class="warn">${wx} avec plus de 5 fils</span>` : ''}` : '—'}</div>`;
   }
@@ -453,7 +501,7 @@ class CablageEditor {
       if (!this.pick) return;
       const posG = t.closest('[data-pos]'), plG = t.closest('[data-pl]');
       if (this.pick === 'douille' && plG && !st.douilles[plG.dataset.pl]) { st.douilles[plG.dataset.pl] = true; this.changed(); }
-      else if (this.pick !== 'douille' && posG && !st.placed[posG.dataset.pos]) { st.placed[posG.dataset.pos] = this.pick; this.changed(); }
+      else if (this.pick !== 'douille' && posG && !st.placed[posG.dataset.pos] && estRail(this.pick) === /^R[GD]-/.test(posG.dataset.pos)) { st.placed[posG.dataset.pos] = this.pick; this.changed(); }
       return;
     }
     if (this.mode === 'gomme') {
@@ -492,7 +540,8 @@ class CablageEditor {
 function renderPlanEnonce(host, variant) {
   host.innerHTML = '';
   const svg = S('svg', { viewBox: '-10 -10 820 620', class: 'plan-svg', role: 'img', 'aria-label': 'Plan des emplacements' }, host);
-  drawBoardBase(svg, {});
+  const rails = variant.devices.some(d => estRail(d.type));
+  drawBoardBase(svg, { rails });
   const lab = (x, y, txt, cls) => {
     const w = txt.length * 6.4 + 12;
     S('rect', { x: x - w / 2, y: y - 11, width: w, height: 20, rx: 10, class: 'tag-bg ' + (cls || '') }, svg);
@@ -510,6 +559,13 @@ function renderPlanEnonce(host, variant) {
       drawPrincipeSymbol(svg, d.type, pos.cx, pos.cy, 0, 0.5);
       lab(pos.cx, pos.cy + (pos.id.endsWith('-B') ? 43 : -40), d.nom, 'tag-dev');
     }
+  }
+  for (const pos of PLANCHE.railSlots) {
+    const d = variant.devices.find(x => x.pos === pos.id);
+    if (!d) continue;
+    S('rect', { x: pos.cx - 14, y: pos.cy - 38, width: 28, height: 76, rx: 2, class: 'symdev-box' }, svg);
+    drawPrincipeSymbol(svg, d.type, pos.cx, pos.cy, 0, symFit(d.type, 24, 40));
+    lab(pos.cx, pos.cy + 52, d.nom, 'tag-dev');
   }
   T(svg, 18, PLANCHE.tubes.ALIM.pts[0][1] - 14, 'Alimentation', { class: 'board-lbl' });
 }
@@ -568,6 +624,12 @@ const BANC_K = 0.75;
 const bLn = (x1, y1, x2, y2, c) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"${c ? ` class="${c}"` : ''}/>`;
 const bBlade = x => bLn(x, -40, x, -14) + bLn(x, 14, x, 40) + bLn(x, 14, x - 13, -16, 'bl');                // contact ouvert (repos)
 const bMan = (xb, xe, vx) => `<path d="M${xb + 5},-8 H${xb} V8 H${xb + 5}"/>` + bLn(xb, 0, xe, 0, 'dash') + `<path class="thin" d="M${vx - 3},2 L${vx},6 L${vx + 3},2"/>`;
+const bPush = x => bLn(x - 7, 0, x - 22, 0, 'dash') + `<path d="M${x - 17},-8 H${x - 22} V8 H${x - 17}"/>`;   // commande par poussoir
+const bCoil = (x, mark) => bLn(x, -40, x, -12) + bLn(x, 12, x, 40) + `<rect x="${x - 10}" y="-12" width="20" height="24"/>` + (mark || '');
+const bLink = (x1, x2) => bLn(x1, 0, x2, 0, 'dash');
+const mClock = (x, y) => `<circle cx="${x}" cy="${y}" r="6" class="thin"/>` + bLn(x, y, x, y - 4, 'thin') + bLn(x, y, x + 3, y, 'thin');
+const mSun = (x, y) => `<circle cx="${x}" cy="${y}" r="3" class="thin"/>` + [0, 45, 90, 135, 180, 225, 270, 315].map(a => { const c = Math.cos(a * Math.PI / 180), sn = Math.sin(a * Math.PI / 180); return bLn((x + c * 5).toFixed(2), (y + sn * 5).toFixed(2), (x + c * 7.5).toFixed(2), (y + sn * 7.5).toFixed(2), 'thin'); }).join('');
+const mStep = (x, y) => `<path class="thin" d="M${x - 6},${y + 4} h4 v-8 h4 v8 h4"/>`;
 const bVV = ox => bLn(ox, -40, ox, -18) + bLn(ox - 20, 40, ox - 20, 18) + bLn(ox + 20, 40, ox + 20, 20) + bLn(ox, -18, ox - 19, 17, 'bl');
 const BANC_SYM = {
   sch1: { pins: [[0, -40], [0, 40]], box: [-38, -40, 60, 80], draw: () => bBlade(0) + bMan(-28, -6, -10) },
@@ -582,13 +644,27 @@ const BANC_SYM = {
   // ordre : L1, 1, 1', L2, 2, 2'
   sch62: { pins: [[-40, -40], [-60, 40], [-20, 40], [40, -40], [20, 40], [60, 40]], box: [-92, -40, 160, 80], draw: () => bVV(-40) + bVV(40) + bMan(-86, 30, -55) },
   sch66: { pins: [[-50, -40], [-70, 40], [-30, 40], [50, -40], [30, 40], [70, 40]], box: [-102, -40, 180, 80], draw: () => '<g transform="translate(-10 0)">' + bVV(-40) + bMan(-86, -50, -55) + bVV(60) + bMan(14, 50, 45) + '</g>' },
+  // bouton-poussoir N.O. : ordre L, 1
+  bp: { pins: [[0, -40], [0, 40]], box: [-30, -40, 52, 80], draw: () => bBlade(0) + bPush(0) },
+  bpv: { pins: [[0, -40], [0, 40]], box: [-30, -40, 64, 80], draw: () => bBlade(0) + bPush(0) + '<circle cx="22" cy="0" r="7" class="bulb"/>' + bLn(17, -5, 27, 5, 'thin') + bLn(17, 5, 27, -5, 'thin') },
+  // double bouton-poussoir N.O./N.F. : ordre L1, 1, 1', L2, 2, 2' (au repos, le commun touche 1' et 2')
+  bp2: { pins: [[-40, -40], [-20, 40], [-60, 40], [40, -40], [60, 40], [20, 40]], box: [-92, -40, 160, 80], draw: () => bVV(-40) + bPush(-50) + bVV(40) + bPush(30) },
+  // télérupteur : bobine A1-A2, contact 1-2 ; ordre A1, A2, 1, 2
+  tl: { pins: [[-20, -40], [-20, 40], [20, -40], [20, 40]], box: [-34, -40, 68, 80], draw: () => bCoil(-20, mStep(-20, 0)) + bBlade(20) + bLink(-10, 13) },
+  // minuterie : entrée poussoirs BP-N, contact L-sortie ; ordre L, N, BP, sortie
+  min4: { pins: [[20, -40], [-20, 40], [-20, -40], [20, 40]], box: [-34, -40, 68, 80], draw: () => bCoil(-20, mClock(-20, 0)) + bBlade(20) + bLink(-10, 13) },
+  min3: { pins: [[20, -40], [-20, 40], [-20, -40], [20, 40]], box: [-34, -40, 68, 80], draw: () => bCoil(-20, mClock(-20, 0)) + bBlade(20) + bLink(-10, 13) },
+  // crépusculaire : alimentation L-N, contact 1-2 ; ordre L, N, 1, 2
+  crep: { pins: [[-20, -40], [-20, 40], [20, -40], [20, 40]], box: [-34, -40, 68, 80], draw: () => bCoil(-20, mSun(-20, 0)) + bBlade(20) + bLink(-10, 13) },
+  // horloge : alimentation L-N, inverseur 2 (commun) - 1 (arrêt) / 3 (marche) ; ordre L, N, 1, 2, 3
+  horl: { pins: [[-30, -40], [-30, 40], [0, 40], [20, -40], [40, 40]], box: [-44, -40, 92, 80], draw: () => bCoil(-30, mClock(-30, 0)) + bVV(20) + bLink(-20, 10) },
   lampe: { pins: [[0, -40], [0, 40]], box: [-28, -40, 56, 80], draw: () => bLn(0, -40, 0, -14) + bLn(0, 14, 0, 40) + '<circle r="14" class="bulb"/>' + bLn(-10, -10, 10, 10) + bLn(-10, 10, 10, -10) },
   // ordre : L, N, PE
   prise: { pins: [[-20, -40], [20, -40], [0, -40]], box: [-30, -40, 60, 74],
     draw: () => bLn(-20, -40, -20, 10) + bLn(20, -40, 20, 10) + bLn(0, -40, 0, -10) + '<circle cy="10" r="20" class="bulb"/>' +
       '<circle cx="-8" cy="12" r="3" class="tdot"/><circle cx="8" cy="12" r="3" class="tdot"/><rect x="-2.5" y="-10" width="5" height="9" class="tdot"/>' },
 };
-const SYM_NOMS = { sch1: 'Interrupteur simple', sch2: 'Interrupteur bipolaire', sch5: 'Interrupteur série', sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', lampe: 'Lampe', prise: 'Prise 2P+T' };
+const SYM_NOMS = { bp: 'Bouton-poussoir', bpv: 'Poussoir à voyant', bp2: 'Double poussoir', tl: 'Télérupteur', min4: 'Minuterie 4 fils', min3: 'Minuterie 3 fils', crep: 'Crépusculaire', horl: 'Horloge', sch1: 'Interrupteur simple', sch2: 'Interrupteur bipolaire', sch5: 'Interrupteur série', sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', lampe: 'Lampe', prise: 'Prise 2P+T' };
 const SYM_P = Object.fromEntries(Object.entries(BANC_SYM).map(([k, v]) => [k, {
   nom: SYM_NOMS[k], terms: v.pins.map(([x, y]) => [x * BANC_K, y * BANC_K]),
   box: v.box.map(n => n * BANC_K),
@@ -887,7 +963,8 @@ class PrincipeEditor {
    ========================================================= */
 const SYM_U = {
   lampe: 'Point lumineux', sch1: 'Interr. simple', sch2: 'Interr. bipolaire', sch5: 'Interr. série',
-  sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', prise: 'Prise 2P+T',
+  sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double',
+  bp: 'Bouton-poussoir', bpv: 'Poussoir à voyant', bp2: 'Double poussoir', tl: 'Télérupteur', min4: 'Minuterie 4 fils', min3: 'Minuterie 3 fils', crep: 'Crépusculaire', horl: 'Horloge', prise: 'Prise 2P+T',
 };
 function drawUniSymbol(g, type, x, y) {
   // x = début du symbole sur la branche ; renvoie la largeur occupée
@@ -912,7 +989,16 @@ function drawUniSymbol(g, type, x, y) {
       const up = (cx, n) => { Ln(cx + 3, y - 3, cx + 16, y - 16); Ln(cx + 16, y - 16, cx + 22, y - 16); if (n > 1) Ln(cx + 12, y - 12, cx + 18, y - 12); };
       const thr = (cx, n) => { up(cx, n); Ln(cx - 3, y + 3, cx - 16, y + 16); Ln(cx - 16, y + 16, cx - 22, y + 16); if (n > 1) Ln(cx - 12, y + 12, cx - 18, y + 12); };
       let w = 22;
+      const boite = (txt) => { S('rect', { x, y: y - 8, width: 26, height: 16, rx: 1, class: 'u-line', fill: 'var(--paper)' }, g); T(g, x + 13, y + 3.5, txt, { class: 'u-small', 'text-anchor': 'middle' }); };
+      const bpU = cx => { C.push(cx); d.push(`M${cx} ${y - 4.5}V${y - 12}`); };
       switch (type) {
+        case 'bp': bpU(x + 5); w = 14; break;
+        case 'bpv': bpU(x + 5); S('circle', { cx: x + 14, cy: y - 10, r: 3.5, class: 'u-line', fill: 'var(--paper)' }, g); Ln(x + 11.5, y - 12.5, x + 16.5, y - 7.5); Ln(x + 11.5, y - 7.5, x + 16.5, y - 12.5); w = 20; break;
+        case 'bp2': bpU(x + 5); bpU(x + 17); w = 26; break;
+        case 'tl': boite('TL'); return 26;
+        case 'min4': case 'min3': boite('Min'); return 26;
+        case 'crep': boite('Cr'); return 26;
+        case 'horl': boite('Hor'); return 26;
         case 'sch1': up(x + 5, 1); C.push(x + 5); w = 27; break;
         case 'sch2': up(x + 5, 2); C.push(x + 5); w = 27; break;
         case 'sch5': { const c = x + 19; Ln(c - 3, y - 3, c - 14, y - 22); Ln(c - 14, y - 22, c - 19, y - 18); Ln(c + 3, y - 3, c + 14, y - 22); Ln(c + 14, y - 22, c + 19, y - 18); C.push(c); w = 40; break; }
@@ -929,7 +1015,7 @@ function drawUniSymbol(g, type, x, y) {
   }
 }
 // largeur occupée sur la branche (avant l'espace de 22 entre deux symboles)
-const UNI_W = { lampe: 26, prise: 22, sch1: 27, sch2: 27, sch5: 40, sch6: 44, sch62: 44, sch7: 36, sch66: 66 };
+const UNI_W = { lampe: 26, prise: 22, sch1: 27, sch2: 27, sch5: 40, sch6: 44, sch62: 44, sch7: 36, sch66: 66, bp: 14, bpv: 20, bp2: 26, tl: 26, min4: 26, min3: 26, crep: 26, horl: 26 };
 const uniLargeur = t => UNI_W[t] || 27;
 class UnifilaireEditor {
   constructor(host, state, opts = {}) {

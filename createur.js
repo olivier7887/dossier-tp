@@ -6,8 +6,8 @@
    Charges : lampes (0, 1, 2) et prises commandées ('p' + index de la prise).
    ========================================================= */
 const EX_BASE = EXERCICES.slice();
-const CR_TYPES = ['sch1', 'sch2', 'sch5', 'sch6', 'sch7', 'sch62', 'sch66', 'prise'];
-const CR_MAX_APP = PLANCHE.positions.length, CR_MAX_LAMPES = PLANCHE.points.length;
+const CR_TYPES = ['sch1', 'sch2', 'sch5', 'sch6', 'sch7', 'sch62', 'sch66', 'prise', 'bp', 'bpv', 'bp2', 'tl', 'min4', 'min3', 'crep', 'horl'];
+const CR_MAX_APP = PLANCHE.positions.length, CR_MAX_RAIL = 6, CR_MAX_LAMPES = PLANCHE.points.length;
 let EX_PERSO = [];
 
 function numEx(n) { const m = String(n).match(/\d+/); return m ? +m[0] : 0; }
@@ -22,19 +22,24 @@ function chargerExercicesLocaux() { appliquerExercicesPerso(store.get(ONLINE ? '
 function prochainNumero() { return String(Math.max(0, ...EXERCICES.map(e => numEx(e.num))) + 1); }
 
 /* ---------- composition (modèle interne du créateur) ----------
-   c.devices = [{ uid, type, touches: [[charges], …] }] ; charge = n° de lampe ou 'u' + uid d'une prise */
+   c.devices = [{ uid, type, touches: [[charges], …] }] ; charge = n° de lampe, 'u' + uid d'une prise,
+   ou 'k' + uid de l'entrée d'un télérupteur / d'une minuterie (commandée par des boutons-poussoirs) */
 let CR_UID = 1;
 const nbTouches = t => t === 'prise' ? 0 : DEUX_TOUCHES.includes(t) ? 2 : 1;
-const sorteUnite = t => ['sch6', 'sch62', 'sch66'].includes(t) ? 'vv' : t === 'sch7' ? 'perm' : t === 'sch2' ? 'bip' : 'simple';
+const sorteUnite = t => ['sch6', 'sch62', 'sch66'].includes(t) ? 'vv' : t === 'sch7' ? 'perm' : t === 'sch2' ? 'bip' : BP_TYPES.includes(t) ? 'bp' : IMPULSION.includes(t) ? 'relais' : AUTO_TYPES.includes(t) ? 'auto' : 'simple';
+const CR_PREF = { tl: 'TL', min4: 'MI', min3: 'MI', crep: 'CR', horl: 'HO' };
 function crNoms(c) {
-  const nbP = c.devices.filter(d => d.type === 'prise').length;
+  const nbP = c.devices.filter(d => d.type === 'prise').length, cpt = {};
   let n = 0, p = 0;
-  return c.devices.map(d => d.type === 'prise' ? (nbP > 1 ? 'PC' + (++p) : 'PC') : 'S' + (++n));
+  return c.devices.map(d => d.type === 'prise' ? (nbP > 1 ? 'PC' + (++p) : 'PC') : CR_PREF[d.type] ? CR_PREF[d.type] + (cpt[CR_PREF[d.type]] = (cpt[CR_PREF[d.type]] || 0) + 1) : 'S' + (++n));
 }
-function crCharges(c) { return [...[...Array(c.lampes).keys()], ...c.devices.filter(d => d.type === 'prise').map(d => 'u' + d.uid)]; }
+// charges que l'on peut commander : lampes, prises, et entrées d'impulsion (télérupteur, minuterie)
+function crCharges(c) { return [...crChargesLP(c), ...c.devices.filter(d => IMPULSION.includes(d.type)).map(d => 'k' + d.uid)]; }
+function crChargesLP(c) { return [...[...Array(c.lampes).keys()], ...c.devices.filter(d => d.type === 'prise').map(d => 'u' + d.uid)]; }
+const estEntree = ch => typeof ch === 'string' && ch[0] === 'k';
 function crNomCharge(c, ch, noms) {
   if (typeof ch === 'number') return 'L' + (ch + 1);
-  const i = c.devices.findIndex(d => 'u' + d.uid === ch);
+  const i = c.devices.findIndex(d => 'u' + d.uid === ch || 'k' + d.uid === ch);
   return (noms || crNoms(c))[i];
 }
 function crUnites(c, ch) { // [{ i, k, sorte }]
@@ -43,11 +48,12 @@ function crUnites(c, ch) { // [{ i, k, sorte }]
   return r;
 }
 function crVersExercice(c) {
-  const idx = Object.fromEntries(c.devices.map((d, i) => ['u' + d.uid, 'p' + i]));
+  const idx = Object.fromEntries(c.devices.flatMap((d, i) => [['u' + d.uid, 'p' + i], ['k' + d.uid, 'i' + i]]));
   const conv = ch => typeof ch === 'number' ? ch : idx[ch];
   const touches = c.devices.map(d => d.touches.map(l => l.map(conv).filter(x => x != null)));
   const ensemble = crEnsemble(c);
   const montage = ensemble ? (c.montage || 'parallèle') : (c.devices.some(d => d.type === 'sch5') ? 'double' : '');
+  // (vv : va-et-vient présent)
   return {
     id: c.id || '', num: String(c.num || prochainNumero()), titre: c.titre.trim(), court: (c.court || '').trim() || crCourt(c), intro: (c.intro || '').trim() || crIntro(c),
     devices: c.devices.map(d => d.type), lampes: c.lampes,
@@ -59,7 +65,7 @@ function crVersExercice(c) {
 function crDepuisExercice(ex) {
   const devices = ex.devices.map(t => ({ uid: CR_UID++, type: t, touches: [] }));
   devices.forEach((d, i) => {
-    d.touches = d.type === 'prise' ? [] : touchesDe(ex, i).map(l => l.map(ch => typeof ch === 'string' ? 'u' + devices[+ch.slice(1)].uid : ch));
+    d.touches = d.type === 'prise' ? [] : touchesDe(ex, i).map(l => l.map(ch => typeof ch === 'string' ? (ch[0] === 'i' ? 'k' : 'u') + devices[+ch.slice(1)].uid : ch));
   });
   const c = { id: ex.id, num: ex.num, titre: ex.titre, devices, lampes: ex.lampes, montage: ex.montage === 'série' || ex.montage === 'parallèle' ? ex.montage : '', visible: ex.visible !== false };
   c.court = ex.court === crCourt(c) ? '' : ex.court; c.intro = ex.intro || '';
@@ -77,7 +83,9 @@ function crEnsemble(c) {
 function crAnalyse(c) {
   const E = [], R = [], noms = crNoms(c), nomC = ch => crNomCharge(c, ch, noms);
   if (!c.devices.length) E.push('Ajoutez au moins un appareil.');
-  if (c.devices.length > CR_MAX_APP) E.push(`La planche n'a que ${CR_MAX_APP} emplacements pour les appareils.`);
+  const nRail = c.devices.filter(d => estRail(d.type)).length;
+  if (c.devices.length - nRail > CR_MAX_APP) E.push(`La planche n'a que ${CR_MAX_APP} emplacements dans les boîtiers.`);
+  if (nRail > CR_MAX_RAIL) E.push(`Un rail DIN de la planche accepte ${CR_MAX_RAIL} modules au plus.`);
   if (c.lampes > CR_MAX_LAMPES) E.push(`La planche n'a que ${CR_MAX_LAMPES} points lumineux.`);
   // chaque touche doit commander quelque chose
   c.devices.forEach((d, i) => d.touches.forEach((l, k) => {
@@ -86,11 +94,24 @@ function crAnalyse(c) {
   c.devices.forEach((d, i) => {
     if (d.touches.length === 2 && d.touches[0].some(ch => d.touches[1].includes(ch))) E.push(`${noms[i]} (${APPAREILS[d.type].court}) : les deux touches ne peuvent pas commander la même charge.`);
   });
+  // boutons-poussoirs : ils commandent un télérupteur ou une minuterie, rien d'autre
+  c.devices.forEach((d, i) => d.touches.forEach(l => {
+    if (BP_TYPES.includes(d.type) && l.some(ch => !estEntree(ch))) E.push(`${noms[i]} (bouton-poussoir) : un poussoir commande un télérupteur ou une minuterie, pas directement une lampe.`);
+    if (!BP_TYPES.includes(d.type) && l.some(estEntree)) E.push(`${noms[i]} : seul un bouton-poussoir commande un télérupteur ou une minuterie.`);
+  }));
+  for (const ch of crCharges(c).filter(estEntree)) if (!crUnites(c, ch).length) E.push(`${nomC(ch)} n'est commandé par aucun bouton-poussoir.`);
   const ens = new Map();
-  for (const ch of crCharges(c)) {
+  for (const ch of crChargesLP(c)) {
     const U = crUnites(c, ch), n = nomC(ch);
     ens.set(ch, U.map(u => u.i + ':' + u.k).sort().join());
     if (!U.length) { if (typeof ch === 'number') E.push(`${n} n'est commandée par aucun interrupteur.`); continue; }
+    const rel = U.filter(u => u.sorte === 'relais'), aut = U.filter(u => u.sorte === 'auto');
+    if (rel.length) { if (U.length > 1) E.push(`${n} : une charge commandée par un télérupteur ou une minuterie ne l'est que par lui.`); continue; }
+    if (aut.length) {
+      if (aut.length !== U.length) E.push(`${n} : l'horloge et le crépusculaire ne se combinent qu'entre eux (en série).`);
+      else if (aut.length > 2 || (aut.length === 2 && c.devices[aut[0].i].type === c.devices[aut[1].i].type)) E.push(`${n} : en série, on combine une horloge et un crépusculaire (un de chaque).`);
+      continue;
+    }
     const vv = U.filter(u => u.sorte === 'vv'), perm = U.filter(u => u.sorte === 'perm');
     if (vv.length || perm.length) {
       if (vv.length + perm.length !== U.length) E.push(`${n} : une charge se commande soit par un seul interrupteur, soit par un va-et-vient, pas les deux.`);
@@ -104,7 +125,7 @@ function crAnalyse(c) {
     } else if (U.length > 1) E.push(`${n} est commandée par ${U.map(u => noms[u.i]).join(' et ')} : pour commander depuis deux endroits, utilisez un va-et-vient.`);
   }
   // des charges commandées par un même interrupteur doivent l'être exactement par les mêmes appareils
-  const ch = crCharges(c);
+  const ch = crChargesLP(c);
   for (let a = 0; a < ch.length; a++) for (let b = a + 1; b < ch.length; b++) {
     const A = ens.get(ch[a]).split(',').filter(Boolean), B = ens.get(ch[b]).split(',').filter(Boolean);
     if (A.length && B.length && A.some(x => B.includes(x)) && A.join() !== B.join()) E.push(`${nomC(ch[a])} et ${nomC(ch[b])} partagent un interrupteur mais pas les autres : commandées ensemble, elles doivent l'être par les mêmes appareils.`);
@@ -112,9 +133,10 @@ function crAnalyse(c) {
   // disposition sur la planche : les appareils d'un va-et-vient dans des boîtiers différents
   if (!E.length && c.devices.length) {
     const ex = crVersExercice(Object.assign({}, c, { titre: c.titre || '-' }));
-    const ids = PLANCHE.positions.map(p => p.id), n = ex.devices.length;
+    const ids = PLANCHE.positions.map(p => p.id), boite = ex.devices.map((t, i) => i).filter(i => !estRail(ex.devices[i])), n = boite.length;
     let ok = false;
-    const perm = (pris, reste) => { if (ok) return; if (pris.length === n) { ok = dispositionOk(ex, pris); return; } reste.forEach((p, k) => perm([...pris, p], reste.filter((x, j) => j !== k))); };
+    const plein = pris => { const pos = ex.devices.map(() => 'RG-1'); boite.forEach((i, j) => { pos[i] = pris[j]; }); return pos; };
+    const perm = (pris, reste) => { if (ok) return; if (pris.length === n) { ok = dispositionOk(ex, plein(pris)); return; } reste.forEach((p, k) => perm([...pris, p], reste.filter((x, j) => j !== k))); };
     perm([], ids);
     if (!ok) E.push('Disposition impossible sur la planche : les appareils de chaque va-et-vient doivent être dans des boîtiers différents (gauche, centre, droite).');
   }
@@ -130,14 +152,21 @@ function crCourt(c) {
 function crIntro(c) {
   const noms = crNoms(c), parts = [], vus = new Set();
   const groupes = {};
-  for (const ch of crCharges(c)) {
+  for (const ch of crChargesLP(c)) {
     const U = crUnites(c, ch); if (!U.length) continue;
     const k = U.map(u => u.i + ':' + u.k).sort().join();
     (groupes[k] ||= { U, ch: [] }).ch.push(ch);
   }
+  const NOMS_MOD = { tl: 'le télérupteur', min4: 'la minuterie', min3: 'la minuterie', crep: 'le crépusculaire', horl: "l'horloge" };
+  const bpsDe = i => [...new Set(crUnites(c, 'k' + c.devices[i].uid).map(u => noms[u.i]))];
   for (const { U, ch } of Object.values(groupes)) {
-    const qui = [...new Set(U.map(u => noms[u.i] + (c.devices[u.i].touches.length > 1 ? ` (touche ${u.k + 1})` : '')))];
     const quoi = ch.map(x => typeof x === 'number' ? `la lampe ${x + 1}` : `la prise ${crNomCharge(c, x, noms)}`);
+    const mods = U.filter(u => u.sorte === 'relais' || u.sorte === 'auto');
+    if (mods.length) {
+      parts.push(`${quoi.join(' et ')} par ${mods.map(u => `${NOMS_MOD[c.devices[u.i].type]} ${noms[u.i]}${u.sorte === 'relais' ? ` (boutons-poussoirs ${bpsDe(u.i).join(', ') || '—'})` : ''}`).join(' et ')}${mods.length > 1 ? ' en série' : ''}`);
+      continue;
+    }
+    const qui = [...new Set(U.map(u => noms[u.i] + (c.devices[u.i].touches.length > 1 ? ` (touche ${u.k + 1})` : '')))];
     const vv = U.some(u => u.sorte === 'vv');
     parts.push(`${quoi.join(' et ')} depuis ${qui.join(qui.length > 2 ? ', ' : ' et ')}${vv ? ' (va-et-vient)' : ''}`);
   }
@@ -163,12 +192,14 @@ function creerView(main) {
       <p>Glissez les appareils et les points lumineux sur la planche (ou touchez-les pour les ajouter), puis indiquez ce que chaque interrupteur commande : lampes et prises. L'app génère l'énoncé, les variantes par élève, le mode opératoire, la correction automatique et les essais.</p></section>
     <div class="cr-grid">
       <aside class="cr-palette" aria-label="Appareils disponibles">
-        <h3>Appareils</h3>
-        ${CR_TYPES.map(t => `<button type="button" class="cr-chip" draggable="true" data-add="${t}" title="Ajouter : ${esc(APPAREILS[t].nom)}"><svg viewBox="-36 -40 72 80" class="paper-svg" aria-hidden="true" data-psym="${t}"></svg><span><b>${APPAREILS[t].court}</b><small>${esc(APPAREILS[t].nom)}</small></span></button>`).join('')}
+        ${[['Interrupteurs', t => /^sch/.test(t)], ['Prise', t => t === 'prise'], ['Boutons-poussoirs', t => BP_TYPES.includes(t)], ['Rail DIN (Hager)', estRail]].map(([titre, f]) => `<h3>${titre}</h3>` + CR_TYPES.filter(f).map(t => `<button type="button" class="cr-chip" draggable="true" data-add="${t}" title="Ajouter : ${esc(APPAREILS[t].nom)}"><svg viewBox="-36 -40 72 80" class="paper-svg" aria-hidden="true" data-psym="${t}"></svg><span><b>${APPAREILS[t].court}</b><small>${esc(APPAREILS[t].nom)}</small></span></button>`).join('')).join('')}
         <h3>Éclairage</h3>
         <button type="button" class="cr-chip" draggable="true" data-add="lampe" title="Ajouter un point lumineux"><svg viewBox="-36 -40 72 80" class="paper-svg" aria-hidden="true" data-psym="lampe"></svg><span><b>Lampe</b><small>Point lumineux</small></span></button>
         <h3>Exemple</h3>
         <button type="button" class="btn small" id="cr-ex-escalier" title="Remplit la planche avec un exemple">Cage d'escalier</button>
+        <button type="button" class="btn small" data-exemple="tl" title="Remplit la planche avec un exemple">Télérupteur</button>
+        <button type="button" class="btn small" data-exemple="min" title="Remplit la planche avec un exemple">Minuterie</button>
+        <button type="button" class="btn small" data-exemple="ext" title="Remplit la planche avec un exemple">Éclairage extérieur</button>
       </aside>
       <div class="cr-main">
         <div class="cr-board" id="cr-board" aria-label="Planche de l'exercice : déposez les éléments ici"></div>
@@ -193,13 +224,25 @@ function creerView(main) {
   const flash = t => { const r = $('#cr-res'); r.textContent = t; setTimeout(() => { if (r.textContent === t) r.textContent = ''; }, 3500); };
   // proposition de commande à l'ajout d'un appareil
   const libres = () => [...Array(c.lampes).keys()].filter(j => !crUnites(c, j).length);
-  const groupeVVIncomplet = () => crCharges(c).find(ch => { const U = crUnites(c, ch); return U.length && U.every(u => u.sorte !== 'simple' && u.sorte !== 'bip') && U.filter(u => u.sorte === 'vv').length < 2; });
+  const groupeVVIncomplet = () => crCharges(c).find(ch => { const U = crUnites(c, ch); return U.length && U.every(u => u.sorte === 'vv' || u.sorte === 'perm') && U.filter(u => u.sorte === 'vv').length < 2; });
   const ajouter = t => {
     if (t === 'lampe') { if (c.lampes >= CR_MAX_LAMPES) return flash(`${CR_MAX_LAMPES} points lumineux au maximum sur la planche.`); c.lampes++; return majTout(); }
-    if (c.devices.length >= CR_MAX_APP) return flash(`${CR_MAX_APP} appareils au maximum sur la planche.`);
+    if (!estRail(t) && c.devices.filter(d => !estRail(d.type)).length >= CR_MAX_APP) return flash(`${CR_MAX_APP} appareils au maximum dans les boîtiers.`);
+    if (estRail(t) && c.devices.filter(d => estRail(d.type)).length >= CR_MAX_RAIL) return flash(`${CR_MAX_RAIL} modules au maximum sur le rail.`);
     const d = { uid: CR_UID++, type: t, touches: Array.from({ length: nbTouches(t) }, () => []) };
+    // un poussoir ajouté sans télérupteur ni minuterie : on en propose un
+    let tlAuto = null;
+    if (BP_TYPES.includes(t) && !c.devices.some(x => IMPULSION.includes(x.type)) && c.devices.filter(x => estRail(x.type)).length < CR_MAX_RAIL) { tlAuto = { uid: CR_UID++, type: 'tl', touches: [libres().slice(0, 1)] }; c.devices.push(tlAuto); }
     const L = libres(), g = groupeVVIncomplet();
-    if (t === 'sch5' || t === 'sch66') d.touches.forEach((tc, k) => { if (L[k] != null) tc.push(L[k]); });
+    if (BP_TYPES.includes(t)) {
+      const entrees = crCharges(c).filter(estEntree), sans = entrees.filter(ch => !crUnites(c, ch).length);
+      d.touches.forEach((tc, k) => { const e = sans[k] ?? entrees[k] ?? (k ? null : entrees[0]); if (e) tc.push(e); });
+    }
+    else if (t === 'sch5' || t === 'sch66') d.touches.forEach((tc, k) => { if (L[k] != null) tc.push(L[k]); });
+    else if (AUTO_TYPES.includes(t)) {
+      const autre = [...Array(c.lampes).keys()].find(j => { const U = crUnites(c, j); return U.length === 1 && U[0].sorte === 'auto' && c.devices[U[0].i].type !== t; });
+      if (L.length) d.touches[0].push(L[0]); else if (autre != null) d.touches[0].push(autre);
+    }
     else if (t === 'sch6' || t === 'sch62' || t === 'sch7') {
       // sch 6 / 6-2 : complète un va-et-vient commencé ; sch 7 : s'insère dans un va-et-vient complet
       const cible = t === 'sch7' ? crCharges(c).find(ch => crUnites(c, ch).filter(u => u.sorte === 'vv').length === 2) : g;
@@ -208,6 +251,7 @@ function creerView(main) {
     }
     else if (t !== 'prise' && L.length) d.touches[0].push(L[0]);
     c.devices.push(d);
+    if (tlAuto) { c.devices.splice(c.devices.indexOf(tlAuto), 1); c.devices.push(tlAuto); }
     majTout();
   };
   main.querySelectorAll('[data-add]').forEach(b => {
@@ -222,6 +266,15 @@ function creerView(main) {
     if (!$('#cr-titre').value.trim()) { $('#cr-titre').value = 'Cage d\'escalier'; c.titre = 'Cage d\'escalier'; }
     majTout();
   });
+  main.querySelectorAll('[data-exemple]').forEach(b => b.addEventListener('click', () => {
+    const u = () => CR_UID++, k = b.dataset.exemple;
+    if (k === 'tl') { const t = u(); c.lampes = 2; c.montage = 'parallèle'; c.devices = [{ uid: u(), type: 'bp', touches: [['k' + t]] }, { uid: u(), type: 'bp', touches: [['k' + t]] }, { uid: u(), type: 'bpv', touches: [['k' + t]] }, { uid: t, type: 'tl', touches: [[0, 1]] }]; }
+    if (k === 'min') { const t = u(); c.lampes = 2; c.montage = 'parallèle'; c.devices = [{ uid: u(), type: 'bpv', touches: [['k' + t]] }, { uid: u(), type: 'bpv', touches: [['k' + t]] }, { uid: t, type: 'min4', touches: [[0, 1]] }]; }
+    if (k === 'ext') { c.lampes = 1; c.montage = ''; c.devices = [{ uid: u(), type: 'horl', touches: [[0]] }, { uid: u(), type: 'crep', touches: [[0]] }]; }
+    const titres = { tl: 'Télérupteur, 3 poussoirs', min: 'Minuterie d\'escalier', ext: 'Éclairage extérieur : horloge et crépusculaire' };
+    if (!$('#cr-titre').value.trim()) { $('#cr-titre').value = titres[k]; c.titre = titres[k]; }
+    majTout();
+  }));
   const board = $('#cr-board');
   board.addEventListener('dragover', e => { e.preventDefault(); board.classList.add('over'); });
   board.addEventListener('dragleave', () => board.classList.remove('over'));
@@ -234,19 +287,21 @@ function creerView(main) {
   main.querySelectorAll('#cr-form input, #cr-form textarea').forEach(i => i.addEventListener('input', () => { lireForm(); majApercu(); }));
   function majTout() { dessinerPlanche(); majApercu(); }
   function chipsCharges(i, k, l, noms) {
-    const charges = crCharges(c);
+    const charges = BP_TYPES.includes(c.devices[i].type) ? crCharges(c).filter(estEntree) : crChargesLP(c);
+    if (BP_TYPES.includes(c.devices[i].type) && !charges.length) return '<span class="muted small">Ajoutez un télérupteur ou une minuterie.</span>';
     if (!charges.length) return '<span class="muted small">Ajoutez une lampe ou une prise.</span>';
     return charges.map(ch => { const on = l.includes(ch), n = crNomCharge(c, ch, noms); return `<button type="button" class="chip ${on ? 'on' : ''} ${typeof ch === 'string' ? 'chip-pc' : ''}" data-cmd="${i}:${k}:${ch}" aria-pressed="${on}">${n}</button>`; }).join('');
   }
   function dessinerPlanche() {
     const a = crAnalyse(c), noms = a.noms;
     board.innerHTML = `
-      <div class="cr-zone"><h3>Appareils <span class="muted small">${c.devices.length} / ${CR_MAX_APP}</span></h3>
+      <div class="cr-zone"><h3>Appareils <span class="muted small">${c.devices.filter(d => !estRail(d.type)).length} / ${CR_MAX_APP} dans les boîtiers${c.devices.some(d => estRail(d.type)) ? ` · ${c.devices.filter(d => estRail(d.type)).length} / ${CR_MAX_RAIL} sur le rail DIN` : ''}</span></h3>
         <div class="cr-cards">${c.devices.map((d, i) => `<div class="cr-card" data-i="${i}">
           <div class="cr-card-h"><svg viewBox="-36 -40 72 80" class="paper-svg" aria-hidden="true" data-psym="${d.type}"></svg><span><b class="mono">${noms[i]}</b> ${esc(APPAREILS[d.type].nom)}</span>
             <button type="button" class="ibtn" data-del="${i}" aria-label="Retirer ${noms[i]}">✕</button></div>
           ${d.type === 'prise' ? `<p class="muted small">${(() => { const U = crUnites(c, 'u' + d.uid); return U.length ? 'Prise commandée par ' + [...new Set(U.map(u => noms[u.i]))].join(' et ') : 'Toujours sous tension. Pour la commander, cochez-la sur un interrupteur.'; })()}</p>`
             : d.touches.map((l, k) => `<div class="cr-cmd"><span class="muted small">${d.touches.length > 1 ? `Touche ${k + 1} :` : 'Commande :'}</span>${chipsCharges(i, k, l, noms)}</div>`).join('')}
+          ${IMPULSION.includes(d.type) ? `<p class="muted small">${(() => { const U = crUnites(c, 'k' + d.uid); return U.length ? 'Commandé par ' + [...new Set(U.map(u => noms[u.i] + (c.devices[u.i].touches.length > 1 ? ` (t.${u.k + 1})` : '')))].join(', ') : 'Pas encore commandé : ajoutez un bouton-poussoir.'; })()}</p>` : ''}
         </div>`).join('') || '<p class="cr-vide">Déposez ici les interrupteurs et les prises.</p>'}</div></div>
       <div class="cr-zone"><h3>Points lumineux <span class="muted small">${c.lampes} / ${CR_MAX_LAMPES}</span></h3>
         <div class="cr-cards">${[...Array(c.lampes).keys()].map(j => `<div class="cr-card lampe"><div class="cr-card-h"><svg viewBox="-36 -40 72 80" class="paper-svg" aria-hidden="true" data-psym="lampe"></svg><span><b class="mono">L${j + 1}</b> Lampe ${j + 1}</span><button type="button" class="ibtn" data-dell="${j}" aria-label="Retirer la lampe ${j + 1}">✕</button></div>
@@ -255,7 +310,7 @@ function creerView(main) {
     drawIllus(board);
     board.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
       const d = c.devices.splice(+b.dataset.del, 1)[0];
-      if (d.type === 'prise') c.devices.forEach(x => { x.touches = x.touches.map(l => l.filter(ch => ch !== 'u' + d.uid)); });
+      c.devices.forEach(x => { x.touches = x.touches.map(l => l.filter(ch => ch !== 'u' + d.uid && ch !== 'k' + d.uid)); });
       majTout();
     }));
     board.querySelectorAll('[data-dell]').forEach(b => b.addEventListener('click', () => {

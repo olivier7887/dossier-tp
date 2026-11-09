@@ -144,27 +144,45 @@ function variante(ex, email) {
   const alim = r() < 0.5 ? 16 : 20;
   const pls = shuffle(PLANCHE.points.map(p => p.id), r).slice(0, ex.lampes || 0);
   const lampes = pls.map((pl, i) => ({ pl, nom: `Lampe ${i + 1}`, empl: PLANCHE.points.find(p => p.id === pl).nom }));
-  let positions;
+  // appareils dans les boîtiers, puis modulaires sur un rail DIN (gauche ou droit, en partant de la boîte)
+  const boite = ex.devices.map((t, i) => i).filter(i => !estRail(ex.devices[i]));
+  const rail = ex.devices.map((t, i) => i).filter(i => estRail(ex.devices[i]));
+  const positions = Array(ex.devices.length);
   for (let k = 0; k < 400; k++) {
-    positions = shuffle(PLANCHE.positions.map(p => p.id), r).slice(0, ex.devices.length);
+    const pick = shuffle(PLANCHE.positions.map(p => p.id), r).slice(0, boite.length);
+    boite.forEach((i, j) => { positions[i] = pick[j]; });
     if (dispositionOk(ex, positions)) break;
   }
+  if (rail.length) {
+    const cote = r() < 0.5 ? 'RG' : 'RD', ordre = cote === 'RG' ? [6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6];
+    rail.forEach((i, j) => { positions[i] = cote + '-' + ordre[j]; });
+  }
   const nbP = ex.devices.filter(t => t === 'prise').length;
+  const PREF = { tl: 'TL', min4: 'MI', min3: 'MI', crep: 'CR', horl: 'HO' }, cpt = {};
   let nS = 0, nP = 0;
-  const reps = ex.devices.map(t => t === 'prise' ? (nbP > 1 ? 'PC' + (++nP) : 'PC') : 'S' + (++nS));
-  const nomCharge = c => typeof c === 'string' && c[0] === 'p' ? 'la prise ' + reps[+c.slice(1)] : (lampes[c] && lampes[c].nom);
+  const reps = ex.devices.map(t => t === 'prise' ? (nbP > 1 ? 'PC' + (++nP) : 'PC') : PREF[t] ? PREF[t] + (cpt[PREF[t]] = (cpt[PREF[t]] || 0) + 1) : 'S' + (++nS));
+  const nomCharge = c => {
+    if (typeof c === 'string' && c[0] === 'p') return 'la prise ' + reps[+c.slice(1)];
+    if (typeof c === 'string' && c[0] === 'i') { const k = +c.slice(1); return (ex.devices[k] === 'tl' ? 'le télérupteur ' : 'la minuterie ') + reps[k]; }
+    return lampes[c] && lampes[c].nom;
+  };
   const devices = ex.devices.map((type, i) => {
-    const pos = PLANCHE.positions.find(p => p.id === positions[i]);
+    const pos = PLANCHE.slots.find(p => p.id === positions[i]);
     const touches = touchesDe(ex, i).map(l => l.map(nomCharge).filter(Boolean));
     const cmd = [...new Set(touches.flat())];
-    const par = type === 'prise' ? commandePar(ex, 'p' + i).map(([j]) => reps[j]) : [];
-    return { type, pos: pos.id, rep: reps[i], nom: reps[i], empl: pos.nom, cmd, touches, par: [...new Set(par)] };
+    const par = type === 'prise' ? commandePar(ex, 'p' + i).map(([j]) => reps[j]) : IMPULSION.includes(type) ? commandePar(ex, 'i' + i).map(([j]) => reps[j]) : [];
+    // crépusculaire et horloge en série sur la même charge
+    const serie = AUTO_TYPES.includes(type) ? [...new Set(chargesDe(ex, i).flatMap(ch => commandePar(ex, ch).map(([j]) => j)))].filter(j => j !== i && AUTO_TYPES.includes(ex.devices[j])).map(j => reps[j]) : [];
+    return { type, pos: pos.id, rep: reps[i], nom: reps[i], empl: pos.nom, cmd, touches, par: [...new Set(par)], serie };
   });
   return { couleur, chantier, alim, lampes, devices };
 }
 // texte « Commande » d'un appareil dans l'énoncé
 function texteCommande(dv) {
   if (dv.type === 'prise') return dv.par.length ? 'commandée par ' + dv.par.join(' et ') : 'toujours sous tension';
+  if (IMPULSION.includes(dv.type)) return `${maj1(dv.cmd.join(' et ') || '—')}, à l'appui sur ${dv.par.length ? dv.par.join(' ou ') : '—'}${dv.type === 'min4' || dv.type === 'min3' ? ' (temporisé)' : ''}`;
+  if (dv.type === 'crep') return `${maj1(dv.cmd.join(' et ') || '—')}, à la tombée de la nuit${dv.serie.length ? ' (en série avec ' + dv.serie.join(', ') + ')' : ''}`;
+  if (dv.type === 'horl') return `${maj1(dv.cmd.join(' et ') || '—')}, aux heures programmées${dv.serie.length ? ' (en série avec ' + dv.serie.join(', ') + ')' : ''}`;
   if (DEUX_TOUCHES.includes(dv.type)) return dv.touches.map((l, k) => `touche ${k + 1} : ${l.length ? l.join(' et ') : '—'}`).join(' · ');
   return dv.cmd.length ? maj1(dv.cmd.join(' et ')) : '—';
 }
@@ -427,7 +445,7 @@ function renderTab(tab, sheet, ex, v, d) {
     mode: () => modeSheet(sheet, ex, d),
     principe: () => { sheet.innerHTML = sheetHead('Schéma de principe', 'Dessinez le circuit entre L1 et N. Le disjoncteur bipolaire et la terre sont déjà imprimés.', 'sch-principe') + '<div id="ed"></div>'; ed = new PrincipeEditor($('#ed'), d.principe, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'principe'); },
     unifilaire: () => { sheet.innerHTML = sheetHead('Schéma unifilaire', 'Complétez la protection, la canalisation et les points raccordés. Le schéma se dessine à droite, comme dans Trikker.', 'sch-unifilaire') + '<div id="ed"></div>'; ed = new UnifilaireEditor($('#ed'), d.unifilaire, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'unifilaire'); },
-    cablage: () => { sheet.innerHTML = sheetHead('Schéma de câblage', 'Placez les appareils aux emplacements de l\'énoncé, posez les douilles, puis tirez chaque fil. Dans la boîte, chaque point noir correspond à une borne Wago.', 'sch-cablage') + '<div id="ed"></div>'; ed = new CablageEditor($('#ed'), d.cablage, { onChange }); bindFiches(sheet); mainBox(sheet, ex, d, 'cablage'); },
+    cablage: () => { sheet.innerHTML = sheetHead('Schéma de câblage', 'Placez les appareils aux emplacements de l\'énoncé, posez les douilles, puis tirez chaque fil. Dans la boîte, chaque point noir correspond à une borne Wago.', 'sch-cablage') + '<div id="ed"></div>'; ed = new CablageEditor($('#ed'), d.cablage, { onChange, rails: ex.devices.some(estRail) }); bindFiches(sheet); mainBox(sheet, ex, d, 'cablage'); },
     position: () => { sheet.innerHTML = sheetHead('Schéma de position', 'Planche vue de face, cotes en mm. Reportez ces cotes au crayon sur la planche avant de fixer quoi que ce soit.', 'sch-position') + '<div class="svg-wrap paper-wrap" id="pos"></div>'; renderPosition($('#pos')); bindFiches(sheet); mainBox(sheet, ex, d, 'position'); },
     bdc: () => bdcSheet(sheet, ex, v, d),
     outils: () => outilsSheet(sheet, ex, d),
@@ -561,7 +579,7 @@ function enonceSheet(sheet, ex, v) {
       <div class="table-wrap"><table class="tbl">
         <thead><tr><th>Repère</th><th>Appareil</th><th>Emplacement</th><th>Commande</th></tr></thead>
         <tbody>
-          ${v.devices.map(dv => `<tr><td class="mono">${dv.rep}</td><td>${esc(APPAREILS[dv.type].nom)} (${APPAREILS[dv.type].court})</td><td>${esc(dv.empl)}</td><td>${esc(texteCommande(dv))}</td></tr>`).join('')}
+          ${v.devices.map(dv => `<tr><td class="mono">${dv.rep}</td><td>${esc(APPAREILS[dv.type].nom)} (${APPAREILS[dv.type].rail ? 'Hager ' + APPAREILS[dv.type].ref : APPAREILS[dv.type].court})</td><td>${esc(dv.empl)}</td><td>${esc(texteCommande(dv))}</td></tr>`).join('')}
           ${v.lampes.map(l => `<tr><td class="mono">${l.nom.replace('Lampe ', 'L')}</td><td>Point lumineux (douille E27 + ampoule LED)</td><td>${esc(l.empl)}</td><td>—</td></tr>`).join('')}
         </tbody></table></div>
       <h3>Plan des emplacements</h3>

@@ -664,7 +664,7 @@ const BANC_SYM = {
     draw: () => bLn(-20, -40, -20, 10) + bLn(20, -40, 20, 10) + bLn(0, -40, 0, -10) + '<circle cy="10" r="20" class="bulb"/>' +
       '<circle cx="-8" cy="12" r="3" class="tdot"/><circle cx="8" cy="12" r="3" class="tdot"/><rect x="-2.5" y="-10" width="5" height="9" class="tdot"/>' },
 };
-const SYM_NOMS = { bp: 'Bouton-poussoir', bpv: 'Poussoir à voyant', bp2: 'Double poussoir', tl: 'Télérupteur', min4: 'Minuterie 4 fils', min3: 'Minuterie 3 fils', crep: 'Crépusculaire', horl: 'Horloge', sch1: 'Interrupteur simple', sch2: 'Interrupteur bipolaire', sch5: 'Interrupteur série', sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', lampe: 'Lampe', prise: 'Prise 2P+T' };
+const SYM_NOMS = { bp: 'Bouton-poussoir', bpv: 'Poussoir à voyant', bp2: 'Double poussoir', tl: 'Télérupteur', min4: 'Minuterie 4 fils', min3: 'Minuterie 3 fils', crep: 'Crépusculaire', horl: 'Horloge', sch1: 'Interrupteur simple', sch2: 'Interrupteur bipolaire', sch5: 'Double allumage', sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double', lampe: 'Lampe', prise: 'Prise 2P+T' };
 const SYM_P = Object.fromEntries(Object.entries(BANC_SYM).map(([k, v]) => [k, {
   nom: SYM_NOMS[k], terms: v.pins.map(([x, y]) => [x * BANC_K, y * BANC_K]),
   box: v.box.map(n => n * BANC_K),
@@ -962,7 +962,7 @@ class PrincipeEditor {
    3. UNIFILAIRE « À LA FAÇON TRIKKER »
    ========================================================= */
 const SYM_U = {
-  lampe: 'Point lumineux', sch1: 'Interr. simple', sch2: 'Interr. bipolaire', sch5: 'Interr. série',
+  lampe: 'Point lumineux', sch1: 'Interr. simple', sch2: 'Interr. bipolaire', sch5: 'Double allumage',
   sch6: 'Va-et-vient', sch7: 'Permutateur', sch62: 'Va-et-vient bipolaire', sch66: 'Va-et-vient double',
   bp: 'Bouton-poussoir', bpv: 'Poussoir à voyant', bp2: 'Double poussoir', tl: 'Télérupteur', min4: 'Minuterie 4 fils', min3: 'Minuterie 3 fils', crep: 'Crépusculaire', horl: 'Horloge', prise: 'Prise 2P+T',
 };
@@ -979,9 +979,9 @@ function drawUniSymbol(g, type, x, y) {
       S('circle', { cx: x + 11, cy: y, r: 10, class: 'u-line', fill: 'var(--paper)' }, g);
       L(`M${x + 4} ${y - 7}L${x + 18} ${y + 7}M${x + 18} ${y - 7}L${x + 4} ${y + 7}`); return 26;
     case 'prise':
-      L(`M${x} ${y}H${x + 6}M${x + 6} ${y - 10}V${y + 10}`);
-      L(`M${x + 6} ${y - 10}A10 10 0 0 1 ${x + 6} ${y + 10}`);
-      L(`M${x + 2} ${y - 13}H${x + 10}`); return 22;
+      // symbole de l'école : trait de terre en travers, arc ouvert avec deux petits pieds (tourné pour suivre la ligne)
+      L(`M${x} ${y}H${x + 6}M${x + 6} ${y - 9}V${y + 9}`);
+      L(`M${x + 19} ${y - 10}V${y - 7}Q${x + 6} ${y - 7} ${x + 6} ${y}Q${x + 6} ${y + 7} ${x + 19} ${y + 7}V${y + 10}`); return 22;
     default: {
       // symboles unifilaires de l'école (mêmes dessins que le Banc de câblage)
       const d = [], C = [];
@@ -1020,6 +1020,7 @@ const uniLargeur = t => UNI_W[t] || 27;
 class UnifilaireEditor {
   constructor(host, state, opts = {}) {
     this.host = host; this.st = state; this.opts = opts;
+    this.cible = {}; // point → 'b2' quand on ajoute sur la seconde branche du double allumage
     Object.assign(state, Object.assign({ lettre: 'A', calibre: '10', poles: '2', cable: 'H07V-U', nb: '3', section: '1,5', pose: 'sous tube', points: [] }, state));
     this.build();
   }
@@ -1056,8 +1057,11 @@ class UnifilaireEditor {
     h.querySelector('#u-list').addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
       const i = +b.dataset.i, P = this.st.points;
-      if (b.dataset.act === 'add') { P[i].items.push(b.dataset.type); }
-      if (b.dataset.act === 'pop') { P[i].items.pop(); }
+      if (b.dataset.act === 'cible') { this.cible[i] = b.dataset.c; this.render(); return; }
+      const liste = this.cible[i] === 'b2' && P[i].items.includes('sch5') ? (P[i].b2 ||= []) : P[i].items;
+      if (b.dataset.act === 'add') liste.push(b.dataset.type);
+      if (b.dataset.act === 'pop') { (liste.length ? liste : P[i].items).pop(); if (!P[i].items.includes('sch5') && P[i].b2) { P[i].items.push(...P[i].b2); delete P[i].b2; } }
+      if (b.dataset.act === 'up' || b.dataset.act === 'down' || b.dataset.act === 'del') this.cible = {};
       if (b.dataset.act === 'up' && i < P.length - 1) [P[i], P[i + 1]] = [P[i + 1], P[i]];
       if (b.dataset.act === 'down' && i > 0) [P[i], P[i - 1]] = [P[i - 1], P[i]];
       if (b.dataset.act === 'del') P.splice(i, 1);
@@ -1069,20 +1073,26 @@ class UnifilaireEditor {
     const P = this.st.points, list = this.host.querySelector('#u-list');
     list.innerHTML = P.map((pt, i) => `
       <li><div class="u-row"><b>Point ${i + 1}</b>
-        <span class="u-items">${pt.items.length ? pt.items.map(t => `<span class="u-tag">${SYM_U[t]}</span>`).join('') : '<span class="muted">vide</span>'}</span>
+        <span class="u-items">${pt.items.length ? pt.items.map(t => `<span class="u-tag">${SYM_U[t]}</span>`).join('') : '<span class="muted">vide</span>'}${(pt.b2 || []).length ? `<span class="u-b2">touche 2 : ${pt.b2.map(t => `<span class="u-tag">${SYM_U[t]}</span>`).join('')}</span>` : ''}</span>
         <span class="u-ctl">
           <button type="button" class="ibtn" data-act="up" data-i="${i}" title="Monter" aria-label="Monter le point">↑</button>
           <button type="button" class="ibtn" data-act="down" data-i="${i}" title="Descendre" aria-label="Descendre le point">↓</button>
           <button type="button" class="ibtn" data-act="pop" data-i="${i}" title="Retirer le dernier symbole" aria-label="Retirer le dernier symbole">⌫</button>
           <button type="button" class="ibtn" data-act="del" data-i="${i}" title="Supprimer le point" aria-label="Supprimer le point">✕</button>
         </span></div>
+        ${pt.items.includes('sch5') ? `<div class="u-cible" role="group" aria-label="Où ajouter les symboles"><span class="muted small">Ajouter sur :</span>
+          <button type="button" class="chip${this.cible[i] !== 'b2' ? ' on' : ''}" data-act="cible" data-c="b1" data-i="${i}">touche 1 · branche du haut</button>
+          <button type="button" class="chip${this.cible[i] === 'b2' ? ' on' : ''}" data-act="cible" data-c="b2" data-i="${i}">touche 2 · branche du bas</button></div>` : ''}
         <div class="u-add">${Object.entries(SYM_U).map(([k, v]) => `<button type="button" class="chip" data-act="add" data-type="${k}" data-i="${i}">+ ${v}</button>`).join('')}</div>
       </li>`).join('');
     // dessin
     const svg = this.svg; svg.innerHTML = '';
     const st = this.st, X = 190, busY = 500;
-    const n = Math.max(P.length, 1), sp = Math.min(70, 380 / n);
-    const topY = Math.min(busY - 90 - (P.length ? (P.length - 1) * sp : 0) - 10, busY - 320);
+    // double allumage : la touche 2 part en seconde branche, sous la première (place en plus sous le point)
+    const B2 = 34, bas = P.map(pt => (pt.b2 || []).length && pt.items.includes('sch5') ? B2 : 0);
+    const n = Math.max(P.length, 1), sp = Math.min(70, (380 - bas.reduce((a, b) => a + b, 0)) / n);
+    const ys = []; P.forEach((pt, i) => { ys.push((i ? ys[i - 1] - sp : busY - 90) - bas[i]); });
+    const topY = Math.min((P.length ? ys[P.length - 1] : busY - 90) - 10, busY - 320);
     S('path', { d: `M60 ${busY}H470`, class: 'u-line' }, svg);
     // disjoncteur
     S('path', { d: `M${X} ${busY}V${busY - 20}L${X - 14} ${busY - 50}`, class: 'u-line' }, svg);
@@ -1095,12 +1105,12 @@ class UnifilaireEditor {
     const cy = (busY - 70 + topY) / 2;
     T(svg, X - 12, cy, cab, { class: 'u-txt', 'text-anchor': 'middle', transform: `rotate(-90 ${X - 12} ${cy})` });
     P.forEach((pt, i) => {
-      const y = busY - 90 - i * sp;
+      const y = ys[i];
       T(svg, X + 4, y - 4, String(i + 1), { class: 'u-small' });
       let x = X + 30;
       const g = S('g', {}, svg);
       const widths = [];
-      for (const t of pt.items) { widths.push(x); x += uniLargeur(t) + 14; }
+      for (const t of pt.items) { widths.push(x); x += uniLargeur(t) + 14 + (t === 'sch5' && bas[i] ? 12 : 0); }
       const endX = pt.items.length ? x - 14 : X + 40;
       S('path', { d: `M${X} ${y}H${pt.items.length ? widths[widths.length - 1] : endX}`, class: 'u-line' }, g);
       pt.items.forEach((t, k) => {
@@ -1108,6 +1118,16 @@ class UnifilaireEditor {
         if (k > 0) S('path', { d: `M${widths[k - 1]} ${y}H${x0}`, class: 'u-line' }, g);
         drawUniSymbol(g, t, x0, y);
       });
+      // seconde branche du double allumage : elle part juste après l'interrupteur et descend
+      const k5 = pt.items.indexOf('sch5');
+      if (bas[i] && k5 >= 0) {
+        const xn = widths[k5] + uniLargeur('sch5') + 7, y2 = y + B2;
+        if (k5 === pt.items.length - 1) S('path', { d: `M${widths[k5]} ${y}H${xn}`, class: 'u-line' }, g);
+        let x2 = xn + 19; const w2 = []; // même alignement que la touche 1
+        for (const t of pt.b2) { w2.push(x2); x2 += uniLargeur(t) + 14; }
+        S('path', { d: `M${xn} ${y}V${y2}H${w2[w2.length - 1]}`, class: 'u-line' }, g);
+        pt.b2.forEach((t, k) => drawUniSymbol(g, t, w2[k], y2));
+      }
     });
     // terre
     const ex = 470;

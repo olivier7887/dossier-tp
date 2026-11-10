@@ -367,7 +367,7 @@ const FICHES = [
     html: `<p>Il ouvre ou ferme <strong>deux conducteurs en même temps</strong> : la phase et le neutre. Le circuit est complètement isolé quand il est ouvert.</p>
 <ul><li>Socle Niko 170-01200 : 4 bornes dans l'ordre <b>L1 · 1 · 2 · L2</b>. L1 et L2 = arrivée (phase et neutre), 1 et 2 = départs vers la lampe.</li>
 <li>Utile pour les lieux humides, les appareils qu'on veut couper totalement, ou une prise de plus de 16 A.</li></ul>` },
-  { id: 'app-sch5', cat: 'Appareils', titre: 'Interrupteur série, double allumage (sch 5)', sym: 'sch5',
+  { id: 'app-sch5', cat: 'Appareils', titre: 'Interrupteur double allumage (sch 5)', sym: 'sch5',
     html: `<p>Deux interrupteurs dans un seul mécanisme, avec une <strong>arrivée commune</strong>. Chaque touche commande sa lampe (ou son groupe de lampes).</p>
 <ul><li>Socle Niko 170-01500 : bornes dans l'ordre <b>1 · L · (vide) · 2</b>. L = phase commune, 1 et 2 = un retour par touche.</li>
 <li>Exemple : les spots d'un côté, le plafonnier de l'autre.</li></ul>` },

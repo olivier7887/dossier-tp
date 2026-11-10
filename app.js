@@ -850,14 +850,21 @@ function remiseSheet(sheet, ex, d) {
     ? [['Bon de commande', d.bdc.lignes.length > 0 && !!d.bdc.tva], ['Outillage', Object.values(d.outils || {}).some(Boolean)], ['Photo de la planche', aPhoto]]
     : [['Schéma de principe', (d.principe.syms || []).length > 0], ['Schéma unifilaire', (d.unifilaire.points || []).length > 0], ['Schéma de câblage', (d.cablage.wires || []).length > 0], ['Bon de commande', d.bdc.lignes.length > 0 && !!d.bdc.tva], ['Outillage', Object.values(d.outils || {}).some(Boolean)], ['Mesures hors tension (Essais)', essaisComplets(ex, variante(ex, prof ? CTX.eleve : USER.email), d)], ['Photo du montage', aPhoto]];
   const remis = prof ? PV.remis : !!d.remis;
+  // l'élève peut changer sa photo avant la remise, et après tant que la correction n'est pas publiée
+  const aPhotoEleve = !prof && !!(PHOTOS[ex.id] || d.photoId);
+  const photoModifiable = !prof && !IMPRESSION && (!remis || (ONLINE && !d.correction));
   sheet.innerHTML = `${sheetHead('Remise du dossier', prof ? 'État du dossier de l\'élève et photo de son montage.' : 'Vérifiez que chaque partie est complète, ajoutez la photo de votre planche, puis remettez le dossier.')}
     <ul class="parts">${parts.map(([n, ok]) => `<li class="${ok ? 'ok' : ''}"><span class="dot" aria-hidden="true"></span>${n}<span class="state ${ok ? 'ok' : ''}">${ok ? 'Complété' : 'À faire'}</span></li>`).join('')}</ul>
     ${resumeMains(ex, prof ? PV.mains : d.mains)}
     <div class="photo-box">
       <h3>Photo de la planche</h3>
-      ${prof ? '' : `<p class="muted">Sur smartphone, le bouton ouvre l'appareil photo. Cadrez toute la planche, de face, bien éclairée.</p>
-      ${remis ? '' : '<label class="btn" for="photo-in">Prendre ou choisir une photo</label><input id="photo-in" type="file" accept="image/*" capture="environment" class="sr">'}`}
-      <div id="photo-prev">${PHOTOS[ex.id] ? `<img src="${PHOTOS[ex.id]}" alt="Photo de la planche">` : (d.photoId && !prof ? '<p class="state ok">Photo envoyée avec le dossier</p>' : '')}</div>
+      ${prof ? (PV.photoId && ONLINE ? '<div class="row wrapr"><button type="button" class="btn small ghost" id="photo-del">Supprimer la photo</button><span class="muted small">L\'élève pourra en envoyer une autre.</span></div>' : '')
+        : `<p class="muted">Sur smartphone, le bouton ouvre l'appareil photo. Cadrez toute la planche, de face, bien éclairée.</p>
+      ${photoModifiable ? `<div class="row wrapr"><label class="btn${aPhotoEleve ? '' : ' primary'}" for="photo-in">${aPhotoEleve ? 'Remplacer la photo' : 'Prendre ou choisir une photo'}</label><input id="photo-in" type="file" accept="image/*" capture="environment" class="sr">
+        ${aPhotoEleve ? '<button type="button" class="btn ghost" id="photo-del">Supprimer la photo</button>' : ''}</div>
+        ${remis && ONLINE ? '<p class="muted small">Votre dossier est remis : vous pouvez encore changer la photo tant que le professeur n\'a pas publié la correction.</p>' : ''}` : ''}`}
+      <div id="photo-prev">${PHOTOS[ex.id] ? `<img src="${PHOTOS[ex.id]}" alt="Photo de la planche"><p class="muted small">Photo prête : elle sera envoyée avec le dossier.</p>` : (d.photoId && !prof ? '<p class="state ok">Photo envoyée avec le dossier</p>' : '')}</div>
+      <p id="photo-msg" class="muted small" role="status"></p>
       ${!ONLINE ? '<p class="muted small">Dans cette démo, la photo reste sur cet appareil.</p>' : ''}
     </div>
     ${prof
@@ -866,9 +873,37 @@ function remiseSheet(sheet, ex, d) {
   sheet.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.goto }))));
   if (prof && PV.photoId && !IMPRESSION) {
     $('#photo-prev').innerHTML = '<p class="muted">Chargement de la photo…</p>';
-    api('profPhoto', { id: PV.photoId }).then(url => { $('#photo-prev').innerHTML = `<img src="${url}" alt="Photo du montage de l'élève">`; })
+    urlPhoto(PV.photoId).then(url => { $('#photo-prev').innerHTML = `<img src="${url}" alt="Photo du montage de l'élève">`; })
       .catch(e => { $('#photo-prev').innerHTML = `<p class="err">${esc(e.message)}</p>`; });
   }
+  // l'élève revoit la photo déjà envoyée, pour vérifier que c'est la bonne
+  if (!prof && !PHOTOS[ex.id] && d.photoId && ONLINE && !IMPRESSION) {
+    urlPhoto(d.photoId).then(url => { const el = $('#photo-prev'); if (el && url) el.innerHTML = `<img src="${url}" alt="Photo de la planche envoyée"><p class="state ok">Photo envoyée avec le dossier</p>`; }).catch(() => {});
+  }
+  const pmsg = t => { const el = $('#photo-msg'); if (el) el.textContent = t; };
+  // envoi immédiat de la photo quand le dossier est déjà remis (ou quand une photo est déjà sur le serveur)
+  const envoyerPhoto = async photo => {
+    if (!enLigne()) return pmsg('Il faut une connexion internet pour changer la photo.');
+    pmsg(photo ? 'Envoi de la photo…' : 'Suppression…');
+    try {
+      const r = await api('photo', { ex: ex.id, photo });
+      d.photoId = r.photoId || ''; delete PHOTOS[ex.id]; if (r.photoId && photo) PHOTO_CACHE[r.photoId] = photo;
+      persist(); go(VIEW);
+    } catch (e) { pmsg(e.message); if (e.auth) deconnecter(e.message); }
+  };
+  const pdel = $('#photo-del');
+  if (pdel) pdel.addEventListener('click', async () => {
+    if (!pdel.dataset.ok) { pdel.dataset.ok = '1'; pdel.textContent = 'Confirmer la suppression'; pdel.classList.add('danger'); return; }
+    pdel.disabled = true;
+    if (prof) {
+      try { await api('profPhotoSuppr', { email: CTX.eleve, ex: ex.id }); PV.photoId = ''; go(VIEW); }
+      catch (e) { pdel.disabled = false; pmsg(e.message); }
+      return;
+    }
+    if (PHOTOS[ex.id]) { delete PHOTOS[ex.id]; return go(VIEW); }       // photo pas encore envoyée
+    if (ONLINE && d.photoId) return envoyerPhoto('');                   // photo déjà sur le serveur
+    d.photoId = ''; persist(); go(VIEW);
+  });
   const rendre = $('#rendre');
   if (rendre) rendre.addEventListener('click', () => {
     rendre.disabled = true;
@@ -882,7 +917,9 @@ function remiseSheet(sheet, ex, d) {
       const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k;
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      PHOTOS[ex.id] = c.toDataURL('image/jpeg', 0.8); URL.revokeObjectURL(url); go(VIEW);
+      const data = c.toDataURL('image/jpeg', 0.8); URL.revokeObjectURL(url);
+      if (remis && ONLINE) return envoyerPhoto(data);
+      PHOTOS[ex.id] = data; go(VIEW);
     };
     img.src = url;
   });

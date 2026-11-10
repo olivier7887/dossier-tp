@@ -151,6 +151,8 @@ const ACTIONS = {
   catSuppr: (u, q) => (prof_(u), catSuppr_(String(q.id))),
   joindre: (u, q) => joindre_(u, String(q.ex), String(q.partie), String(q.fichier || ''), String(q.nom || '')),
   retirer: (u, q) => retirer_(u, String(q.ex), String(q.partie)),
+  photo: (u, q) => changerPhoto_(u, String(q.ex), String(q.photo || '')),
+  profPhotoSuppr: (u, q) => (prof_(u), profPhotoSuppr_(String(q.email).toLowerCase(), String(q.ex))),
   monFichier: (u, q) => monFichier_(u, String(q.id)),
   profEssai: (u, q) => (prof_(u), profEssai_(u, String(q.email).toLowerCase(), String(q.ex), q.essai || {})),
   exSauver: (u, q) => (prof_(u), exSauver_(u, q.exercice || {})),
@@ -159,7 +161,7 @@ const ACTIONS = {
   profNouvelleAnnee: (u, q) => (admin_(u), nouvelleAnnee_(String(q.confirmation || ''))),
 };
 // actions refusées si l'app de l'élève date d'une année scolaire archivée
-const ECRITURES = ['sauverDossier', 'remettre', 'joindre', 'retirer', 'reprendre', 'profil'];
+const ECRITURES = ['sauverDossier', 'remettre', 'joindre', 'retirer', 'reprendre', 'profil', 'photo'];
 
 /* =========================================================
    Clé signée (HMAC-SHA256)
@@ -298,9 +300,44 @@ function remettre_(u, ex, json, photo) {
     if (i < 0) { sh.appendRow([u.email, ex, json, now, true, now, photoId, lien, '', false, 1, '', '']); return { remis: true, photoId, remises: 1 }; }
     if (rows[i][4] === true) throw new Error('Ce dossier a déjà été remis.');
     const n = (Number(rows[i][10]) || 0) + 1;
+    if (photoId && rows[i][6] && String(rows[i][6]) !== photoId) jeterFichier_(String(rows[i][6])); // l'ancienne photo est remplacée
     sh.getRange(i + 2, 3, 1, 6).setValues([[json, now, true, now, photoId || rows[i][6], lien || rows[i][7]]]);
     sh.getRange(i + 2, 11).setValue(n);
     return { remis: true, photoId, remises: n };
+  });
+}
+
+/* ---------- photo du montage : remplacer ou supprimer (même après la remise, tant que la correction n'est pas publiée) ---------- */
+function creerPhoto_(email, ex, photo) {
+  const m = String(photo).match(/^data:(image\/\w+);base64,(.+)$/);
+  if (!m) throw new Error('Photo illisible.');
+  if (m[2].length > 14e6) throw new Error('Photo trop lourde.');
+  const n = nomDepuisEmail_(email);
+  const nomFichier = `${n.nom} ${n.prenom} – TP ${ex} – ${Utilities.formatDate(new Date(), 'Europe/Brussels', 'yyyy-MM-dd HH.mm')}.jpg`;
+  return dossierPhotos_().createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], nomFichier));
+}
+function jeterFichier_(id) { if (id) { try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* déjà supprimé */ } } }
+function changerPhoto_(u, ex, photo) {
+  if (u.role !== 'eleve') throw new Error('Seuls les élèves changent la photo de leur montage.');
+  const avant = ligneDossier_(u.email, ex);
+  if (avant.i >= 0 && avant.rows[avant.i][9] === true) throw new Error('Le dossier est déjà corrigé : demandez à votre professeur pour changer la photo.');
+  const f = photo ? creerPhoto_(u.email, ex, photo) : null;
+  return verrou_(() => {
+    const sh = onglet_('dossiers'), { rows, i } = ligneDossier_(u.email, ex);
+    if (i >= 0 && rows[i][9] === true) { if (f) f.setTrashed(true); throw new Error('Le dossier est déjà corrigé : demandez à votre professeur pour changer la photo.'); }
+    if (i < 0) { sh.appendRow([u.email, ex, '{}', new Date(), false, '', f ? f.getId() : '', f ? f.getUrl() : '', '', false, 0, '', '']); return { photoId: f ? f.getId() : '' }; }
+    jeterFichier_(String(rows[i][6] || ''));
+    sh.getRange(i + 2, 7, 1, 2).setValues([[f ? f.getId() : '', f ? f.getUrl() : '']]);
+    return { photoId: f ? f.getId() : '' };
+  });
+}
+function profPhotoSuppr_(email, ex) {
+  return verrou_(() => {
+    const { rows, i } = ligneDossier_(email, ex);
+    if (i < 0) throw new Error('Dossier introuvable.');
+    jeterFichier_(String(rows[i][6] || ''));
+    onglet_('dossiers').getRange(i + 2, 7, 1, 2).setValues([['', '']]);
+    return true;
   });
 }
 

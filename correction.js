@@ -431,7 +431,7 @@ function corrigerUnifilaire(ex, v, st) {
   // symboles
   const compte = arr => arr.reduce((m, t) => (m[t] = (m[t] || 0) + 1, m), {});
   const att = compte([...ex.devices, ...Array(ex.lampes).fill('lampe')]);
-  const fait = compte(pts.flatMap(p => p.items));
+  const fait = compte(pts.flatMap(p => [...p.items, ...(p.items.includes('sch5') ? p.b2 || [] : [])]));
   let symOk = true;
   for (const t of new Set([...Object.keys(att), ...Object.keys(fait)])) {
     const a = att[t] || 0, f = fait[t] || 0, nom = SYM_U[t] || t;
@@ -443,6 +443,7 @@ function corrigerUnifilaire(ex, v, st) {
     if (p.items.includes('lampe') && !p.items.some(t => t !== 'lampe' && t !== 'prise')) F.push({ g: 'remarque', msg: `Point ${i + 1} : le point lumineux n'a pas son interrupteur sur la même branche.` });
     if (p.items.includes('prise') && p.items.some(t => /^sch/.test(t)) && !prisesCommandees(ex).length) F.push({ g: 'remarque', msg: `Point ${i + 1} : la prise n'est pas commandée par un interrupteur.` });
     if (!p.items.length) F.push({ g: 'remarque', msg: `Point ${i + 1} vide.` });
+    if (p.items.includes('sch5') && !(p.b2 || []).length && p.items.slice(p.items.indexOf('sch5') + 1).filter(t => t === 'lampe').length > 1) F.push({ g: 'remarque', msg: `Point ${i + 1} : le double allumage part en deux branches. Mettez la lampe de la touche 2 sur la branche du bas (bouton « touche 2 · branche du bas »).`, fiche: 'app-sch5' });
   });
   return F;
 }

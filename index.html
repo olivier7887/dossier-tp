@@ -259,6 +259,12 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 .c-ico { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; }
 .c-erreur .c-ico { background: var(--accent); color: var(--accent-ink); } .c-remarque .c-ico { background: var(--warn); color: #fff; } .c-ok .c-ico { background: var(--ok-soft); color: var(--ok); }
 .c-ok .c-txt { color: var(--muted); }
+.constats li:has(.c-acc) { grid-template-columns: 22px 1fr auto auto; }
+.c-acc { display: inline-flex; align-items: center; gap: 4px; font-size: .78rem; color: var(--muted); white-space: nowrap; cursor: pointer; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.c-acc:has(input:checked) { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.c-acc input { margin: 0; accent-color: var(--ok); }
+.c-acc-lbl { font: 600 .7rem var(--font-body); padding: 1px 6px; border-radius: 4px; background: var(--ok-soft); color: var(--ok); white-space: nowrap; }
+@media print { .c-acc { display: none; } }
 .c-code { font: 600 .7rem var(--font-mono); padding: 1px 6px; border-radius: 4px; background: var(--prof-soft); color: var(--prof); white-space: nowrap; }
 .corr-comment { background: var(--prof-soft); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
 .corr-comment .k { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--prof); font-weight: 600; }
@@ -588,12 +594,12 @@ dialog:has(.annot-dlg) { width: min(1000px, calc(100vw - 24px)); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=13"></script>
-<script src="editors.js?v=13"></script>
-<script src="correction.js?v=13"></script>
-<script src="pratique.js?v=13"></script>
-<script src="createur.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="data.js?v=14"></script>
+<script src="editors.js?v=14"></script>
+<script src="correction.js?v=14"></script>
+<script src="pratique.js?v=14"></script>
+<script src="createur.js?v=14"></script>
+<script src="app.js?v=14"></script>
 
 </body>
 </html>

@@ -1071,14 +1071,15 @@ function mainBox(sheet, ex, d, partie) {
 
 /* ---------- correction (V2) ---------- */
 const ORDRE_G = { erreur: 0, remarque: 1, ok: 2 };
-function htmlParties(parties, ouvert) {
+function htmlParties(parties, ouvert, accepter) {
   return parties.map(p => {
     const err = p.F.filter(f => f.g === 'erreur').length, rem = p.F.filter(f => f.g === 'remarque').length;
     return `<details class="corr-part" ${ouvert || err || rem ? 'open' : ''}><summary><span class="corr-titre">${esc(p.titre)}</span>
       <span class="corr-badges">${err ? `<span class="pill-err">${err} erreur${err > 1 ? 's' : ''}</span>` : ''}${rem ? `<span class="pill-rem">${rem} remarque${rem > 1 ? 's' : ''}</span>` : ''}${!err && !rem ? '<span class="pill-ok">tout juste</span>' : ''}</span>
       <span class="corr-score mono">${num(p.score)} / ${p.max}</span></summary>
       <ul class="constats">${p.F.slice().sort((a, b) => ORDRE_G[a.g] - ORDRE_G[b.g]).map(f => `<li class="c-${f.g}"><span class="c-ico" aria-hidden="true">${f.g === 'ok' ? '✓' : f.g === 'erreur' ? '✕' : '!'}</span>
-        <span class="c-txt">${esc(f.msg)}${f.code ? ` <span class="c-code" title="Code d'infraction Vinçotte (RGIE)">Vinçotte ${f.code}</span>` : ''}</span>${f.fiche && f.g !== 'ok' ? `<button type="button" class="as-link small" data-fiche="${f.fiche}">Comment faire ?</button>` : ''}</li>`).join('')}</ul></details>`;
+        <span class="c-txt">${esc(f.msg)}${f.code ? ` <span class="c-code" title="Code d'infraction Vinçotte (RGIE)">Vinçotte ${f.code}</span>` : ''}${f.accepte ? ' <span class="c-acc-lbl">accepté par le professeur</span>' : ''}</span>${f.fiche && f.g !== 'ok' ? `<button type="button" class="as-link small" data-fiche="${f.fiche}">Comment faire ?</button>` : ''}
+        ${accepter && (f.g !== 'ok' || f.accepte) ? `<label class="c-acc" title="Accepter : ce point ne compte plus dans la note"><input type="checkbox" data-acc="${esc(cleConstat(p.id, f))}" ${f.accepte ? 'checked' : ''}> Accepter</label>` : ''}</li>`).join('')}</ul></details>`;
   }).join('');
 }
 function totalGrille(g) {
@@ -1094,9 +1095,13 @@ function htmlGrille(g, editable) {
 }
 function correctionSheet(sheet, ex, v, d) {
   const prof = USER.role === 'prof';
-  const auto = corrigerDossier(ex, v, d);
+  let auto = corrigerDossier(ex, v, d);
   if (prof && CTX.eleve) {
     const saved = PV.correction;
+    const h0a = (PV.historique || [])[0];
+    // constats acceptés par le professeur (repris de la première correction pour la seconde remise)
+    if (!PV.acceptes) PV.acceptes = ((saved && saved.acceptes) || (h0a && h0a.correction && h0a.correction.acceptes) || []).slice();
+    auto = corrigerDossier(ex, v, d, PV.acceptes);
     const g = Object.assign({}, auto.grille, saved && saved.grille);
     const propPF = propositionProduit(ex, v, PV.essaiProf);
     if ((g.produit == null || g.produit === '') && propPF) g.produit = propPF.total;
@@ -1121,13 +1126,31 @@ function correctionSheet(sheet, ex, v, d) {
             <button type="button" class="btn primary" id="g-pub" ${PV.remis ? '' : 'disabled title="Le dossier doit être remis"'}>${PV.publiee ? 'Republier' : 'Publier à l\'élève'}</button></div>
           <p id="g-msg" class="muted small" role="status"></p>
         </div>
-        <div class="corr-main"><h3>Correction automatique</h3>${htmlParties(auto.parties)}</div>
+        <div class="corr-main"><h3>Correction automatique</h3>
+          <p class="muted small">Un point que la correction n'a pas prévu, mais que vous trouvez juste (un article en plus pertinent, par exemple) ? Cochez « Accepter » : il ne compte plus dans la note et l'élève le verra comme accepté.</p>
+          <div id="corr-parts">${htmlParties(auto.parties, false, true)}</div></div>
       </div>`;
     const lire = () => { const o = {}; sheet.querySelectorAll('[data-g]').forEach(i => { const t = i.value.trim().replace(',', '.'); o[i.dataset.g] = t === '' ? null : Math.max(0, +t || 0); }); return o; };
     const majTot = () => { const { tot, max } = totalGrille(lire()); $('#g-tot').textContent = num(tot); $('#g-max').innerHTML = `${max || 215}${max ? ` <span class="muted">· ${Math.round(tot / max * 100)} %</span>` : ''}`; };
     sheet.querySelectorAll('[data-g]').forEach(i => i.addEventListener('input', majTot));
+    // accepter / refuser un constat : la note automatique change, et la grille suit (les retouches du prof sont gardées)
+    $('#corr-parts').addEventListener('change', e => {
+      const cb = e.target.closest('[data-acc]'); if (!cb) return;
+      const k = cb.dataset.acc;
+      PV.acceptes = PV.acceptes.filter(x => x !== k); if (cb.checked) PV.acceptes.push(k);
+      const avant = auto; auto = corrigerDossier(ex, v, d, PV.acceptes);
+      for (const [gk] of GRILLE) {
+        const delta = (auto.grille[gk] || 0) - (avant.grille[gk] || 0), inp = sheet.querySelector(`[data-g="${gk}"]`);
+        if (delta && inp && inp.value.trim() !== '') inp.value = String(Math.max(0, Math.round(((+inp.value.replace(',', '.') || 0) + delta) * 2) / 2)).replace('.', ',');
+      }
+      const ouverts = [...sheet.querySelectorAll('#corr-parts details')].map(x => x.open);
+      $('#corr-parts').innerHTML = htmlParties(auto.parties, false, true);
+      sheet.querySelectorAll('#corr-parts details').forEach((x, i) => { if (ouverts[i]) x.open = true; });
+      bindFiches($('#corr-parts')); majTot();
+      $('#g-msg').textContent = 'N\'oubliez pas d\'enregistrer ou de publier.';
+    });
     const envoyer = publier => {
-      const corr = { date: Date.now(), essai: PV.remises || 1, grille: lire(), commentaire: $('#g-com').value.trim(), parties: auto.parties.map(p => ({ id: p.id, titre: p.titre, max: p.max, score: p.score, F: p.F })), annot: PV.annot && PV.annot.items.length ? PV.annot : null };
+      const corr = { date: Date.now(), essai: PV.remises || 1, grille: lire(), commentaire: $('#g-com').value.trim(), parties: auto.parties.map(p => ({ id: p.id, titre: p.titre, max: p.max, score: p.score, F: p.F })), acceptes: PV.acceptes.slice(), annot: PV.annot && PV.annot.items.length ? PV.annot : null };
       $('#g-msg').textContent = publier ? 'Publication…' : 'Enregistrement…';
       api('profCorriger', { email: CTX.eleve, ex: ex.id, correction: corr, publier })
         .then(() => { PV.correction = corr; if (publier) PV.publiee = true; ELEVES = null; go(VIEW); })

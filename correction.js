@@ -554,8 +554,9 @@ function corrigerBdc(ex, v, d, planche) {
     }
     if (!Object.keys(besoinsFil).length) F.push({ g: 'remarque', msg: 'Fils : impossible de calculer les longueurs, le schéma de câblage est vide.' });
   }
+  // un constat par article en plus : le professeur peut accepter chacun séparément
   const inutiles = [...new Set(lignes.map(l => l.id))].filter(id => !utilise.has(id));
-  if (inutiles.length) F.push({ g: 'remarque', msg: `Article${pl(inutiles.length)} non nécessaire${pl(inutiles.length)} pour ce TP : ${inutiles.map(id => (catItem(id) || { des: id }).des.split(' — ')[0]).join(' ; ')}.` });
+  inutiles.forEach(id => F.push({ g: 'remarque', msg: `Article non prévu pour ce TP : ${(catItem(id) || { des: id }).des.split(' — ')[0]} (${num(q(id))}).` }));
   return F;
 }
 function corrigerTva(v, d) {
@@ -587,10 +588,16 @@ function noter(F, max, retrait = BAREME.retrait) {
   for (const f of F) if (f.g === 'erreur') s -= retrait.erreur; else if (f.g === 'remarque') s -= retrait.remarque;
   return Math.max(0, Math.round(s * 2) / 2);
 }
-function corrigerDossier(ex, v, d) {
+// clé d'un constat, pour que le professeur puisse l'accepter (il ne compte plus)
+const cleConstat = (partie, f) => partie + '|' + f.msg;
+function accepterConstats(id, F, acceptes) {
+  if (!acceptes || !acceptes.length) return F;
+  return F.map(f => f.g !== 'ok' && acceptes.includes(cleConstat(id, f)) ? Object.assign({}, f, { g: 'ok', accepte: f.g }) : f);
+}
+function corrigerDossier(ex, v, d, acceptes) {
   d = d || {};
   const parties = [];
-  const ajoute = (id, titre, max, F, grille, retrait) => parties.push({ id, titre, max, score: noter(F, max, retrait), F, grille });
+  const ajoute = (id, titre, max, F, grille, retrait) => { F = accepterConstats(id, F, acceptes); parties.push({ id, titre, max, score: noter(F, max, retrait), F, grille }); };
   if (ex.kind !== 'planche') {
     ajoute('principe', 'Schéma de principe', BAREME.principe, corrigerPrincipe(ex, v, d.principe), 'processus');
     ajoute('unifilaire', 'Schéma unifilaire', BAREME.unifilaire, corrigerUnifilaire(ex, v, d.unifilaire), 'processus');

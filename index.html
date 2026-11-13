@@ -431,9 +431,14 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 .pwire.sel { stroke: #8c1d2e; stroke-width: 2.4; }
 .pwire.drawing { stroke: #8c1d2e; stroke-dasharray: 5 3; }
 .pwire-hit { stroke: transparent; stroke-width: 9; fill: none; }
-.paper-svg[data-mode="fil"] .pwire-hit, .paper-svg[data-mode="placer"] .pwire-hit { pointer-events: none; }
-.paper-svg[data-mode="fil"] { cursor: crosshair; } .paper-svg[data-mode="placer"] { cursor: copy; }
-.paper-svg[data-mode="gomme"] .sym, .paper-svg[data-mode="gomme"] .pwire-hit { cursor: not-allowed; }
+.svg-wrap .principe-svg { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.principe-svg[data-etat="placer"] { cursor: copy; } .principe-svg[data-etat="fil"] { cursor: crosshair; }
+.principe-svg[data-etat="placer"] .pwire-hit, .principe-svg[data-etat="placer"] .pterm-hit { pointer-events: none; }
+.base-hit { cursor: pointer; }
+.pterm-hit { fill: transparent; cursor: pointer; }
+.pterm-hit:hover, .pterm-hit.dep { fill: rgba(140, 29, 46, .18); stroke: #8c1d2e; stroke-width: 1; }
+.principe-svg[data-etat="fil"] .sym { cursor: crosshair; }
+.pstart { fill: #8c1d2e; pointer-events: none; }
 .pjoint { fill: #1a1a1a; }
 .sym-ghost { opacity: .45; pointer-events: none; }
 .u-line { stroke: #1a1a1a; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -583,12 +588,12 @@ dialog:has(.annot-dlg) { width: min(1000px, calc(100vw - 24px)); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=11"></script>
-<script src="editors.js?v=11"></script>
-<script src="correction.js?v=11"></script>
-<script src="pratique.js?v=11"></script>
-<script src="createur.js?v=11"></script>
-<script src="app.js?v=11"></script>
+<script src="data.js?v=12"></script>
+<script src="editors.js?v=12"></script>
+<script src="correction.js?v=12"></script>
+<script src="pratique.js?v=12"></script>
+<script src="createur.js?v=12"></script>
+<script src="app.js?v=12"></script>
 
 </body>
 </html>

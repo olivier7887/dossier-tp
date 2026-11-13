@@ -1,6 +1,6 @@
 // Dossier TP – fonctionnement hors connexion
-const CACHE = 'dossier-tp-v11';
-const FICHIERS = ['./', 'index.html', 'config.js', 'data.js?v=11', 'editors.js?v=11', 'correction.js?v=11', 'pratique.js?v=11', 'createur.js?v=11', 'app.js?v=11', 'aide.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const CACHE = 'dossier-tp-v12';
+const FICHIERS = ['./', 'index.html', 'config.js', 'data.js?v=12', 'editors.js?v=12', 'correction.js?v=12', 'pratique.js?v=12', 'createur.js?v=12', 'app.js?v=12', 'aide.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FICHIERS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

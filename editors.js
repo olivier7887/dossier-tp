@@ -716,10 +716,13 @@ function drawPrincipeSymbol(parent, type, cx, cy, rot = 0, sc = 1) {
 }
 
 class PrincipeEditor {
+  /* Comme le Banc de câblage : on touche un symbole de la palette puis la feuille pour le poser,
+     on glisse un symbole pour le déplacer, on touche une borne puis une autre pour les relier.
+     Pas de mode à choisir ; la feuille ne défile pas pendant qu'on dessine. */
   constructor(host, state, opts = {}) {
     this.host = host; this.st = state; this.opts = opts;
     state.syms ||= []; state.wires ||= [];
-    this.mode = 'select'; this.pick = null; this.sel = null; this.draw = null; this.drag = null;
+    this.pick = null; this.sel = null; this.draw = null; this.down = null;
     this.base = [
       { id: 'L1', pts: [[110, 40], [770, 40]] },
       { id: 'N', pts: [[110, 420], [770, 420]] },
@@ -732,13 +735,10 @@ class PrincipeEditor {
     const h = this.host; h.innerHTML = ''; h.classList.add('editor');
     const bar = document.createElement('div'); bar.className = 'toolbar';
     bar.innerHTML = `
-      <div class="tool-group" role="group" aria-label="Outil">
-        <button type="button" class="tbtn" data-mode="select">Sélectionner / déplacer</button>
-        <button type="button" class="tbtn" data-mode="fil">Tracer une liaison</button>
-        <button type="button" class="tbtn" data-mode="gomme">Effacer</button>
-      </div>
-      <div class="tool-group" role="group" aria-label="Symbole sélectionné">
+      <div class="tool-group" role="group" aria-label="Sélection">
         <button type="button" class="tbtn" data-act="rot">Pivoter ⟳</button>
+        <button type="button" class="tbtn" data-act="del">Supprimer</button>
+        <button type="button" class="tbtn" data-act="stop">Annuler la liaison</button>
       </div>`;
     h.appendChild(bar);
     const pal = document.createElement('div'); pal.className = 'palette sym-palette';
@@ -747,42 +747,60 @@ class PrincipeEditor {
     h.appendChild(pal);
     pal.querySelectorAll('.symbtn').forEach(b => drawPrincipeSymbol(b.querySelector('svg'), b.dataset.type, 0, 0, 0, 1));
     const wrap = document.createElement('div'); wrap.className = 'svg-wrap paper-wrap';
-    this.svg = S('svg', { viewBox: '0 0 800 500', class: 'paper-svg', role: 'img', 'aria-label': 'Schéma de principe' });
+    this.svg = S('svg', { viewBox: '0 0 800 500', class: 'paper-svg principe-svg', role: 'img', 'aria-label': 'Schéma de principe' });
     wrap.appendChild(this.svg); h.appendChild(wrap);
     this.hint = document.createElement('p'); this.hint.className = 'hint'; h.appendChild(this.hint);
     bar.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.mode) { this.mode = b.dataset.mode; this.pick = null; this.draw = null; }
-      if (b.dataset.act === 'rot' && this.sel && this.sel.k === 'sym') {
-        const s = this.st.syms.find(s => s.id === this.sel.id); if (s) { this.moveSym(s, s.x, s.y, (s.rot + 90) % 360); this.changed(); return; }
-      }
-      this.render();
+      if (b.dataset.act === 'rot') this.pivoter();
+      if (b.dataset.act === 'del') this.removeSel();
+      if (b.dataset.act === 'stop') { this.draw = null; this.render(); }
     });
     pal.addEventListener('click', e => {
       const b = e.target.closest('[data-type]'); if (!b) return;
-      this.pick = b.dataset.type; this.mode = 'placer'; this.render();
+      this.pick = this.pick === b.dataset.type ? null : b.dataset.type; this.draw = null; this.render();
     });
     this.svg.addEventListener('pointerdown', e => this.onDown(e));
     this.svg.addEventListener('pointermove', e => this.onMove(e));
     this.svg.addEventListener('pointerup', e => this.onUp(e));
-    this.svg.addEventListener('dblclick', () => { if (this.draw) this.finishWire(); });
+    this.svg.addEventListener('pointercancel', () => { this.down = null; });
+    this.svg.addEventListener('pointerleave', () => { if (this.pick && !this.down) { this.ghostAt = null; this.render(); } });
+    this.svg.addEventListener('dblclick', () => { if (this.draw && this.draw.pts.length > 1) this.finishWire(); });
     document.addEventListener('keydown', this._key = e => {
       if (!this.host.isConnected) return;
-      if (e.key === 'Escape') { this.draw = null; this.pick = null; if (this.mode === 'placer') this.mode = 'select'; this.render(); }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && this.sel && !/input|textarea|select/i.test(document.activeElement.tagName)) { this.removeSel(); e.preventDefault(); }
-      if ((e.key === 'r' || e.key === 'R') && this.sel && this.sel.k === 'sym' && !/input|textarea/i.test(document.activeElement.tagName)) {
-        const s = this.st.syms.find(s => s.id === this.sel.id); if (s) { this.moveSym(s, s.x, s.y, (s.rot + 90) % 360); this.changed(); }
-      }
+      if (/input|textarea|select/i.test(document.activeElement.tagName)) return;
+      if (e.key === 'Escape') { this.draw = null; this.pick = null; this.render(); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && this.sel) { this.removeSel(); e.preventDefault(); }
+      if (e.key === 'r' || e.key === 'R') this.pivoter();
     });
     this.render();
   }
   destroy() { document.removeEventListener('keydown', this._key); }
+  pivoter() {
+    const s = this.sel && this.sel.k === 'sym' && this.st.syms.find(s => s.id === this.sel.id);
+    if (s) { this.moveSym(s, s.x, s.y, (s.rot + 90) % 360); this.changed(); }
+  }
   termsOf(s) { return SYM_P[s.type].terms.map(([x, y]) => { const [rx, ry] = rotPt(x, y, s.rot); return [s.x + rx, s.y + ry]; }); }
+  // sens dans lequel le fil quitte une borne : vertical pour une borne du haut ou du bas
+  termDir(s, i) { const [x, y] = SYM_P[s.type].terms[i], [rx, ry] = rotPt(x, y, s.rot); return Math.abs(rx) > Math.abs(ry) ? 'h' : 'v'; }
+  snapGrid(p) { const g = 10; return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g }; }
   snap(p) {
-    // borne proche ?
     for (const s of this.st.syms) for (const t of this.termsOf(s)) if (Math.hypot(t[0] - p.x, t[1] - p.y) < 9) return { x: t[0], y: t[1], term: true };
-    const g = 10;
-    return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+    return this.snapGrid(p);
+  }
+  // point d'une ligne (L1, N, PE ou liaison) le plus proche, sur la grille ; renvoie aussi le sens perpendiculaire
+  surLigne(pts, p) {
+    let best = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      let q, dir;
+      if (a[1] === b[1]) { q = [Math.min(Math.max(Math.round(p.x / 10) * 10, Math.min(a[0], b[0])), Math.max(a[0], b[0])), a[1]]; dir = 'v'; }
+      else if (a[0] === b[0]) { q = [a[0], Math.min(Math.max(Math.round(p.y / 10) * 10, Math.min(a[1], b[1])), Math.max(a[1], b[1]))]; dir = 'h'; }
+      else continue;
+      const d = Math.hypot(q[0] - p.x, q[1] - p.y);
+      if (!best || d < best.d) best = { d, pt: q, dir };
+    }
+    return best;
   }
   onLine(p, pts) {
     for (let i = 0; i < pts.length - 1; i++) {
@@ -807,9 +825,30 @@ class PrincipeEditor {
       }
     }
   }
+  // tracé à angles droits de a vers b : dirA = sens de départ, dirB = sens d'arrivée (si b est une borne ou une ligne)
+  route(a, dirA, b, dirB) {
+    if (a[0] === b[0] || a[1] === b[1]) return [b];
+    if (dirA === 'v' && dirB === 'v') { const my = Math.round((a[1] + b[1]) / 20) * 10; return [[a[0], my], [b[0], my], b]; }
+    if (dirA === 'h' && dirB === 'h') { const mx = Math.round((a[0] + b[0]) / 20) * 10; return [[mx, a[1]], [mx, b[1]], b]; }
+    if (dirA === 'v' || dirB === 'h') return [[a[0], b[1]], b];
+    return [[b[0], a[1]], b];
+  }
+  // cible sous le doigt pendant une liaison : borne, ligne de base, liaison, ou point libre
+  cible(p, t) {
+    const te = t && t.closest && t.closest('[data-term]');
+    if (te) { const [sid, i] = te.dataset.term.split(':'), s = this.st.syms.find(x => x.id === sid); if (s) { const q = this.termsOf(s)[+i]; return { pt: [q[0], q[1]], dir: this.termDir(s, +i), fin: true, term: te.dataset.term }; } }
+    const q = this.snap(p);
+    if (q.term) { for (const s of this.st.syms) this.termsOf(s).forEach((t2, i) => { if (t2[0] === q.x && t2[1] === q.y) q.dir = this.termDir(s, i); }); return { pt: [q.x, q.y], dir: q.dir || 'v', fin: true }; }
+    const lineEl = t && t.closest && t.closest('[data-wire], [data-base]');
+    if (lineEl) {
+      const pts = lineEl.dataset.base ? this.base.find(b => b.id === lineEl.dataset.base).pts : (this.st.wires.find(w => w.id === lineEl.dataset.wire) || {}).pts;
+      const r = pts && this.surLigne(pts, p); if (r) return { pt: r.pt, dir: r.dir, fin: true };
+    }
+    return { pt: [q.x, q.y], dir: null, fin: false };
+  }
   render() {
     const svg = this.svg; svg.innerHTML = '';
-    svg.dataset.mode = this.mode;
+    svg.dataset.etat = this.pick ? 'placer' : this.draw ? 'fil' : 'libre';
     // grille légère
     const grid = S('g', { class: 'grid' }, svg);
     for (let x = 0; x <= 800; x += 10) S('line', { x1: x, x2: x, y1: 0, y2: 500, class: x % 50 ? 'g1' : 'g2' }, grid);
@@ -824,7 +863,7 @@ class PrincipeEditor {
       S('rect', { x: 56, y: y + 14, width: 9, height: 7, transform: `rotate(-22 60 ${y + 18})`, class: 'base-fill' }, base);
     }
     S('path', { d: 'M86 49V429', class: 'base-line dash' }, base);
-    for (const b of this.base) S('path', { d: pathD(b.pts), class: 'base-line' }, base);
+    for (const b of this.base) { S('path', { d: pathD(b.pts), class: 'base-line' }, base); S('path', { d: pathD(b.pts), class: 'pwire-hit base-hit', 'data-base': b.id }, base); }
     S('circle', { cx: 60, cy: 470, r: 2.6, class: 'base-fill' }, base);
     S('path', { d: 'M60 470V482M46 482H74M51 487H69M56 492H64', class: 'base-line' }, base);
     T(base, 790, 494, 'Schéma de principe', { class: 'base-cart', 'text-anchor': 'end' });
@@ -842,8 +881,13 @@ class PrincipeEditor {
       const bx = SYM_P[s.type].box;
       S('rect', { x: s.x + bx[0] - 4, y: s.y + bx[1] - 4, width: bx[2] + 8, height: bx[3] + 8, class: 'sym-hit', transform: `rotate(${s.rot} ${s.x} ${s.y})` }, g);
       drawPrincipeSymbol(g, s.type, s.x, s.y, s.rot);
-      for (const t of this.termsOf(s)) S('circle', { cx: t[0], cy: t[1], r: 2.2, class: 'pterm' }, g);
+      this.termsOf(s).forEach(t => S('circle', { cx: t[0], cy: t[1], r: 2.2, class: 'pterm' }, g));
     }
+    // bornes : grandes zones à toucher, au-dessus des symboles
+    for (const s of this.st.syms) this.termsOf(s).forEach((t, i) => {
+      const k = s.id + ':' + i, dep = this.draw && this.draw.depart === k;
+      S('circle', { cx: t[0], cy: t[1], r: 8, class: 'pterm-hit' + (dep ? ' dep' : ''), 'data-term': k }, svg);
+    });
     // points de connexion
     const ends = [];
     for (const w of this.st.wires) ends.push(w.pts[0], w.pts[w.pts.length - 1]);
@@ -860,30 +904,23 @@ class PrincipeEditor {
     }
     // tracé en cours
     if (this.draw) {
-      S('path', { d: pathD([...this.draw.pts, this.draw.cur]), class: 'pwire drawing' }, svg);
+      S('path', { d: pathD(this.draw.preview || this.draw.pts), class: 'pwire drawing' }, svg);
+      S('circle', { cx: this.draw.pts[0][0], cy: this.draw.pts[0][1], r: 4, class: 'pstart' }, svg);
     }
-    if (this.mode === 'placer' && this.pick && this.ghostAt) {
+    if (this.pick && this.ghostAt) {
       const g = S('g', { class: 'sym-ghost' }, svg); drawPrincipeSymbol(g, this.pick, this.ghostAt.x, this.ghostAt.y, 0);
     }
-    this.host.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === this.mode));
-    this.host.querySelectorAll('.symbtn').forEach(b => b.classList.toggle('on', this.mode === 'placer' && b.dataset.type === this.pick));
+    this.host.querySelectorAll('.symbtn').forEach(b => b.classList.toggle('on', b.dataset.type === this.pick));
     this.host.querySelector('[data-act="rot"]').disabled = !(this.sel && this.sel.k === 'sym');
-    const hints = {
-      select: 'Cliquez sur un symbole pour le sélectionner, glissez pour le déplacer. Touche R : pivoter. Suppr : effacer.',
-      placer: 'Cliquez sur la feuille pour poser le symbole. Échap pour arrêter.',
-      fil: this.draw ? 'Cliquez pour ajouter un coude. La liaison se termine sur une borne ou sur une autre ligne (double-clic pour terminer ailleurs).' : 'Cliquez sur une borne (petit rond) ou sur une ligne L1, N ou PE pour commencer.',
-      gomme: 'Cliquez sur une liaison ou un symbole pour l\'effacer.',
-    };
-    this.hint.textContent = hints[this.mode];
-  }
-  orthoAdd(pts, q) {
-    const last = pts[pts.length - 1];
-    if (last[0] !== q[0] && last[1] !== q[1]) pts.push([q[0], last[1]]);
-    pts.push([q[0], q[1]]);
+    this.host.querySelector('[data-act="del"]').disabled = !this.sel;
+    this.host.querySelector('[data-act="stop"]').hidden = !this.draw;
+    this.hint.textContent = this.pick ? `Touchez la feuille pour poser : ${SYM_P[this.pick].nom.toLowerCase()}. Touchez à nouveau le symbole de la palette pour annuler.`
+      : this.draw ? 'Touchez la borne d\'arrivée, ou la ligne L1, N, PE ou une autre liaison. Toucher un endroit libre ajoute un coude. Échap ou « Annuler la liaison » pour arrêter.'
+      : 'Choisissez un symbole dans la palette puis touchez la feuille pour le poser. Glissez un symbole pour le déplacer. Pour relier : touchez une borne (petit rond) ou la ligne L1, N ou PE, puis la borne d\'arrivée. Touchez un symbole ou une liaison pour le sélectionner (Pivoter, Supprimer).';
   }
   finishWire() {
     if (this.draw && this.draw.pts.length > 1) {
-      // nettoyage : points alignés
+      // nettoyage : points répétés et points alignés
       const p = this.draw.pts.filter((pt, i, a) => i === 0 || pt[0] !== a[i - 1][0] || pt[1] !== a[i - 1][1]);
       const c = [p[0]];
       for (let i = 1; i < p.length - 1; i++) {
@@ -903,59 +940,82 @@ class PrincipeEditor {
     this.sel = null; this.changed();
   }
   onDown(e) {
+    if (e.button > 0) return;
     const p = svgPoint(this.svg, e), t = e.target;
-    if (this.mode === 'placer' && this.pick) {
-      const q = this.snap(p);
-      const s = { id: uid(), type: this.pick, x: q.x, y: q.y, rot: 0 };
-      this.st.syms.push(s); this.sel = { k: 'sym', id: s.id };
-      this.changed(); return;
-    }
-    if (this.mode === 'gomme') {
-      const sg = t.closest('[data-sym]');
-      if (sg) { this.st.syms = this.st.syms.filter(s => s.id !== sg.dataset.sym); return this.changed(); }
-      if (t.dataset.wire) { this.st.wires = this.st.wires.filter(w => w.id !== t.dataset.wire); return this.changed(); }
-      return;
-    }
-    if (this.mode === 'fil') {
-      const q = this.snap(p), pt = [q.x, q.y];
-      const all = [...this.base.map(b => b.pts), ...this.st.wires.map(w => w.pts)];
-      const onSomething = q.term || all.some(pts => this.onLine(pt, pts));
-      if (!this.draw) { this.draw = { pts: [pt], cur: pt }; this.render(); return; }
-      this.orthoAdd(this.draw.pts, pt);
-      if (onSomething) this.finishWire(); else this.render();
-      return;
-    }
-    // select
-    const sg = t.closest('[data-sym]');
-    if (sg) {
-      const s = this.st.syms.find(s => s.id === sg.dataset.sym);
-      this.sel = { k: 'sym', id: s.id };
-      this.drag = { s, dx: p.x - s.x, dy: p.y - s.y, moved: false };
-      this.svg.setPointerCapture(e.pointerId);
-      this.render(); return;
-    }
-    if (t.dataset.wire) { this.sel = { k: 'wire', id: t.dataset.wire }; this.render(); return; }
-    this.sel = null; this.render();
+    const symEl = t.closest('[data-sym]'), termEl = t.closest('[data-term]');
+    this.down = { cx: e.clientX, cy: e.clientY, sx: e.screenX, sy: e.screenY, wx: this.svg.parentNode.scrollLeft, wy: window.scrollY, touch: e.pointerType !== 'mouse', p, t, moved: false, sym: !termEl && !this.pick && !this.draw && symEl ? this.st.syms.find(s => s.id === symEl.dataset.sym) : null };
+    if (this.down.sym) this.down.off = { dx: p.x - this.down.sym.x, dy: p.y - this.down.sym.y };
+    try { this.svg.setPointerCapture(e.pointerId); } catch (err) { /* pas grave */ }
+    e.preventDefault();
   }
   onMove(e) {
-    const p = svgPoint(this.svg, e);
-    if (this.drag) {
-      const nx = Math.round((p.x - this.drag.dx) / 10) * 10, ny = Math.round((p.y - this.drag.dy) / 10) * 10;
-      if (nx !== this.drag.s.x || ny !== this.drag.s.y) { this.moveSym(this.drag.s, nx, ny, this.drag.s.rot); this.drag.moved = true; this.render(); }
+    const p = svgPoint(this.svg, e), d = this.down;
+    if (d && !d.moved && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) > 5) {
+      d.moved = true;
+      // glisser depuis une borne commence une liaison (comme un toucher)
+      if (!this.draw && !this.pick && d.t.closest && d.t.closest('[data-term]')) { this.clic(d.p, d.t); d.tire = true; }
+    }
+    // au doigt, glisser sur une zone libre fait défiler la feuille et la page, comme d'habitude
+    if (d && d.moved && d.touch && !d.sym && !d.tire && !this.draw && !this.pick) {
+      this.svg.parentNode.scrollLeft = d.wx - (e.screenX - d.sx); window.scrollTo(window.scrollX, d.wy - (e.screenY - d.sy)); return;
+    }
+    if (d && d.sym && d.moved) {
+      const s = d.sym, nx = Math.round((p.x - d.off.dx) / 10) * 10, ny = Math.round((p.y - d.off.dy) / 10) * 10;
+      if (this.sel?.id !== s.id) this.sel = { k: 'sym', id: s.id };
+      if (nx !== s.x || ny !== s.y) { this.moveSym(s, nx, ny, s.rot); d.drag = true; this.render(); }
       return;
     }
     if (this.draw) {
-      const q = this.snap(p), last = this.draw.pts[this.draw.pts.length - 1];
-      this.draw.cur = (q.x !== last[0] && q.y !== last[1]) ? [q.x, q.y] : [q.x, q.y];
-      const tmp = this.draw.pts.slice(); this.orthoAdd(tmp, [q.x, q.y]);
-      this.draw.preview = tmp;
-      this.render();
-      const pr = this.svg.querySelector('.drawing'); if (pr) pr.setAttribute('d', pathD(tmp));
+      const c = this.cible(p, document.elementFromPoint(e.clientX, e.clientY));
+      const last = this.draw.pts[this.draw.pts.length - 1];
+      this.draw.preview = [...this.draw.pts, ...this.route(last, this.draw.dir, c.pt, c.dir)];
+      const pr = this.svg.querySelector('.drawing'); if (pr) pr.setAttribute('d', pathD(this.draw.preview));
       return;
     }
-    if (this.mode === 'placer' && this.pick) { const q = this.snap(p); this.ghostAt = q; this.render(); }
+    if (this.pick) { const q = this.snapGrid(p); if (!this.ghostAt || q.x !== this.ghostAt.x || q.y !== this.ghostAt.y) { this.ghostAt = q; this.render(); } }
   }
-  onUp() { if (this.drag) { const m = this.drag.moved; this.drag = null; if (m) this.changed(); } }
+  onUp(e) {
+    const d = this.down; this.down = null;
+    if (!d) return;
+    if (d.drag) { this.changed(); return; }
+    if (d.moved) {
+      // liaison tirée en glissant depuis une borne : on la termine là où le doigt se lève
+      if (d.tire && this.draw) { const t2 = document.elementFromPoint(e.clientX, e.clientY), c = this.cible(svgPoint(this.svg, e), t2); if (c.fin) this.clic(svgPoint(this.svg, e), t2); }
+      return;
+    }
+    this.clic(d.p, d.t);
+  }
+  clic(p, t) {
+    // 1. poser le symbole choisi dans la palette
+    if (this.pick) {
+      const q = this.snapGrid(p), s = { id: uid(), type: this.pick, x: q.x, y: q.y, rot: 0 };
+      this.st.syms.push(s); this.sel = { k: 'sym', id: s.id }; this.pick = null; this.ghostAt = null;
+      return this.changed();
+    }
+    const c = this.cible(p, t);
+    // 2. liaison en cours : une borne ou une ligne la termine, un point libre ajoute un coude
+    if (this.draw) {
+      if (c.term && c.term === this.draw.depart && this.draw.pts.length === 1) { this.draw = null; return this.render(); }
+      const last = this.draw.pts[this.draw.pts.length - 1];
+      if (c.pt[0] === last[0] && c.pt[1] === last[1]) return;
+      const seg = this.route(last, this.draw.dir, c.pt, c.fin ? c.dir : null);
+      this.draw.pts.push(...seg);
+      if (c.fin) return this.finishWire();
+      const a = this.draw.pts[this.draw.pts.length - 2], b = this.draw.pts[this.draw.pts.length - 1];
+      this.draw.dir = a[0] === b[0] ? 'h' : 'v';
+      return this.render();
+    }
+    // 3. une borne ou une ligne L1 / N / PE : on commence une liaison
+    if (c.fin && (c.term || (t && t.closest && t.closest('[data-base]')))) {
+      this.draw = { pts: [c.pt], dir: c.dir || 'v', depart: c.term }; this.sel = null; return this.render();
+    }
+    // 4. sinon : sélection
+    const symEl = t && t.closest && t.closest('[data-sym]');
+    if (symEl) { this.sel = { k: 'sym', id: symEl.dataset.sym }; return this.render(); }
+    const wEl = t && t.closest && t.closest('[data-wire]');
+    if (wEl) { this.sel = { k: 'wire', id: wEl.dataset.wire }; return this.render(); }
+    this.sel = null; this.render();
+  }
 }
 
 /* =========================================================

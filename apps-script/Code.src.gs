@@ -285,7 +285,7 @@ function remettre_(u, ex, json, photo) {
   if (u.role !== 'eleve') throw new Error('Seuls les élèves remettent un dossier.');
   json = nettoyer_(json);
   const avant = ligneDossier_(u.email, ex);
-  if (avant.i >= 0 && (Number(avant.rows[avant.i][10]) || 0) >= 2) throw new Error('Vous avez déjà remis ce dossier deux fois.');
+  // pas de limite au nombre de remises : après la seconde, c'est le professeur qui rend le dossier (profRendre)
   let photoId = '', lien = '';
   if (photo) {
     const m = String(photo).match(/^data:(image\/\w+);base64,(.+)$/);
@@ -397,7 +397,7 @@ function reprendre_(u, ex) {
     if (i < 0) throw new Error('Dossier introuvable.');
     const r = rows[i];
     if (r[4] !== true || r[9] !== true) throw new Error('Le dossier doit être remis et corrigé avant de pouvoir le reprendre.');
-    if ((Number(r[10]) || 0) >= 2) throw new Error('La seconde remise a déjà été utilisée.');
+    if ((Number(r[10]) || 0) >= 2) throw new Error('Demandez à votre professeur de vous rendre le dossier pour le remettre encore une fois.');
     const hist = json_(r[11], []);
     hist.push({ correction: json_(r[8], null), le: new Date().getTime() });
     onglet_('dossiers').getRange(i + 2, 5, 1, 1).setValue(false);
@@ -541,10 +541,20 @@ function profCorriger_(email, ex, correction, publier) {
   });
 }
 function profRendre_(email, ex) {
+  // le professeur rend le dossier : l'élève peut le corriger et le remettre (sans limite de nombre)
   return verrou_(() => {
-    const { i } = ligneDossier_(email, ex);
+    const { rows, i } = ligneDossier_(email, ex);
     if (i < 0) throw new Error('Dossier introuvable.');
-    onglet_('dossiers').getRange(i + 2, 5).setValue(false);
+    const r = rows[i], sh = onglet_('dossiers');
+    const corr = json_(r[8], null);
+    if (corr) {
+      // la correction déjà faite part dans l'historique, comme pour une reprise par l'élève
+      const hist = json_(r[11], []);
+      hist.push({ correction: corr, le: new Date().getTime(), rendu: true });
+      sh.getRange(i + 2, 12).setValue(JSON.stringify(hist));
+      sh.getRange(i + 2, 9, 1, 2).setValues([['', false]]);
+    }
+    sh.getRange(i + 2, 5).setValue(false);
     return true;
   });
 }

@@ -859,8 +859,9 @@ function remiseSheet(sheet, ex, d) {
     <div class="photo-box">
       <h3>Photo de la planche</h3>
       ${prof ? (PV.photoId && ONLINE ? '<div class="row wrapr"><button type="button" class="btn small ghost" id="photo-del">Supprimer la photo</button><span class="muted small">L\'élève pourra en envoyer une autre.</span></div>' : '')
-        : `<p class="muted">Sur smartphone, le bouton ouvre l'appareil photo. Cadrez toute la planche, de face, bien éclairée.</p>
-      ${photoModifiable ? `<div class="row wrapr"><label class="btn${aPhotoEleve ? '' : ' primary'}" for="photo-in">${aPhotoEleve ? 'Remplacer la photo' : 'Prendre ou choisir une photo'}</label><input id="photo-in" type="file" accept="image/*" capture="environment" class="sr">
+        : `<p class="muted">Cadrez toute la planche, de face, bien éclairée. Si l'appareil photo ne s'ouvre pas (« mémoire insuffisante »), prenez la photo avec l'app Appareil photo du téléphone, puis choisissez-la avec « Photo de la galerie ».</p>
+      ${photoModifiable ? `<div class="row wrapr"><label class="btn${aPhotoEleve ? '' : ' primary'}" for="photo-cam">${aPhotoEleve ? 'Reprendre une photo' : 'Prendre une photo'}</label><input id="photo-cam" data-photo-in type="file" accept="image/*" capture="environment" class="sr">
+        <label class="btn" for="photo-in">Photo de la galerie</label><input id="photo-in" data-photo-in type="file" accept="image/*" class="sr">
         ${aPhotoEleve ? '<button type="button" class="btn ghost" id="photo-del">Supprimer la photo</button>' : ''}</div>
         ${remis && ONLINE ? '<p class="muted small">Votre dossier est remis : vous pouvez encore changer la photo tant que le professeur n\'a pas publié la correction.</p>' : ''}` : ''}`}
       <div id="photo-prev">${PHOTOS[ex.id] ? `<img src="${PHOTOS[ex.id]}" alt="Photo de la planche"><p class="muted small">Photo prête : elle sera envoyée avec le dossier.</p>` : (d.photoId && !prof ? '<p class="state ok">Photo envoyée avec le dossier</p>' : '')}</div>
@@ -909,20 +910,15 @@ function remiseSheet(sheet, ex, d) {
     rendre.disabled = true;
     api('profRendre', { email: CTX.eleve, ex: ex.id }).then(() => { PV.remis = false; go(VIEW); }).catch(e => { rendre.disabled = false; $('#rem-msg').textContent = e.message; });
   });
-  const pin = $('#photo-in');
-  if (pin) pin.addEventListener('change', e => {
-    const f = e.target.files[0]; if (!f) return;
-    const img = new Image(), url = URL.createObjectURL(f);
-    img.onload = () => {
-      const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
-      const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k;
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      const data = c.toDataURL('image/jpeg', 0.8); URL.revokeObjectURL(url);
+  sheet.querySelectorAll('[data-photo-in]').forEach(pin => pin.addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    pmsg('Préparation de la photo…');
+    try {
+      const data = await reduirePhoto(f, 1600, 0.8);
       if (remis && ONLINE) return envoyerPhoto(data);
       PHOTOS[ex.id] = data; go(VIEW);
-    };
-    img.src = url;
-  });
+    } catch (err) { pmsg(err.message); }
+  }));
   const rem = $('#remettre');
   if (rem) rem.addEventListener('click', async () => {
     if (!ONLINE) { d.remis = true; d.remises = (d.remises || 0) + 1; save(); go(Object.assign({}, VIEW, { tab: 'correction' })); return; }
@@ -983,6 +979,41 @@ function voirFichier(titre, m, url) {
   dlg.addEventListener('close', () => { if (href !== url) URL.revokeObjectURL(href); }, { once: true });
   dlg.showModal();
 }
+// réduit une photo du téléphone (12 à 48 Mpx) à « max » pixels de côté, en économisant la mémoire
+async function reduirePhoto(f, max, q, fond) {
+  if (f.type && !/^image\//.test(f.type)) throw new Error('Choisissez une photo (JPG, PNG ou HEIC).');
+  let src = null, w, h, url = null;
+  try {
+    // décodage directement à la bonne taille quand le navigateur le permet (évite de charger 48 Mpx en mémoire)
+    if (window.createImageBitmap) {
+      try {
+        const b0 = await createImageBitmap(f, { resizeWidth: max, resizeQuality: 'medium' });
+        // resizeWidth seul garde les proportions ; si la photo est en hauteur, on la décode pour la largeur voulue
+        if (b0.height > b0.width) { const k = max / b0.height; b0.close && b0.close(); src = await createImageBitmap(f, { resizeWidth: Math.round(max * k), resizeQuality: 'medium' }); }
+        else src = b0;
+        if (src.width > max * 1.01 || src.height > max * 1.01) { src.close && src.close(); src = null; } // option ignorée : méthode classique
+      } catch (e) { src = null; }
+    }
+    if (!src) {
+      url = URL.createObjectURL(f);
+      src = await new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('Photo illisible : essayez avec « Photo de la galerie » ou prenez une autre photo.')); img.src = url; });
+    }
+    w = src.naturalWidth || src.width; h = src.naturalHeight || src.height;
+    const k = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+    const g = c.getContext('2d');
+    if (fond) { g.fillStyle = fond; g.fillRect(0, 0, c.width, c.height); }
+    g.drawImage(src, 0, 0, c.width, c.height);
+    const data = c.toDataURL('image/jpeg', q);
+    c.width = c.height = 0; // libère la mémoire tout de suite (important sur iPhone)
+    if (data.length < 100) throw new Error('Mémoire insuffisante pour préparer la photo : fermez les autres apps et réessayez.');
+    return data;
+  } finally {
+    if (src && src.close) src.close();
+    if (src && src.src !== undefined && url) src.src = '';
+    if (url) URL.revokeObjectURL(url);
+  }
+}
 function fichierVersDataUrl(f) {
   return new Promise((res, rej) => {
     if (f.type === 'application/pdf') {
@@ -990,15 +1021,7 @@ function fichierVersDataUrl(f) {
       const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('Fichier illisible.')); r.readAsDataURL(f); return;
     }
     if (!/^image\//.test(f.type)) return rej(new Error('Envoyez une photo (JPG, PNG) ou un PDF.'));
-    const img = new Image(), u = URL.createObjectURL(f);
-    img.onload = () => {
-      const k = Math.min(1, 2000 / Math.max(img.width, img.height));
-      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.82));
-    };
-    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Image illisible : envoyez-la en JPG ou en PDF.')); };
-    img.src = u;
+    reduirePhoto(f, 2000, 0.82, '#fff').then(res, () => rej(new Error('Image illisible : envoyez-la en JPG ou en PDF.')));
   });
 }
 function mainBox(sheet, ex, d, partie) {

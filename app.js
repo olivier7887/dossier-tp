@@ -390,12 +390,14 @@ function exView(main) {
     p = nameFromEmail(email);
   } else {
     d = exData(ex.id); p = DATA.profil; CUR_EX = ex.id;
-    if (ONLINE && !FETCHED[ex.id] && enLigne()) {
-      FETCHED[ex.id] = true;
+    // l'état du dossier (remis, rendu, corrigé) vient du serveur : on le relit à chaque ouverture (au plus toutes les 20 s)
+    if (ONLINE && Date.now() - (FETCHED[ex.id] || 0) > 20000 && enLigne()) {
+      FETCHED[ex.id] = Date.now();
       api('lireDossier', { ex: ex.id }).then(r => {
         if (!r) return;
         const loc = DATA.ex[ex.id];
-        if ((DATA.dirty || {})[ex.id] && !r.remis) return;
+        // des modifications locales pas encore envoyées sont gardées, sauf si la copie locale se croit encore « remise »
+        if ((DATA.dirty || {})[ex.id] && !r.remis && !(loc && loc.remis)) return;
         if (!loc || (r.maj || 0) >= (loc.maj || 0) || r.remis !== !!loc.remis) {
           const avant = JSON.stringify(loc);
           DATA.ex[ex.id] = normEx(r); persist();
@@ -869,7 +871,7 @@ function remiseSheet(sheet, ex, d) {
       ${!ONLINE ? '<p class="muted small">Dans cette démo, la photo reste sur cet appareil.</p>' : ''}
     </div>
     ${prof
-      ? `<div class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span><button type="button" class="btn primary" data-goto="correction">Corriger</button><button type="button" class="btn ghost" id="rendre">Rendre le dossier à l\'élève</button>' : '<span class="state">Pas encore remis</span>'}<span id="rem-msg" class="muted" role="status"></span></div>`
+      ? `<div class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span><button type="button" class="btn primary" data-goto="correction">Corriger</button><button type="button" class="btn ghost" id="rendre">Rendre le dossier à l\'élève</button>' : (PV.remises ? `<span class="state">Rendu à l'élève : il peut le corriger et le remettre (${nomRemise(PV.remises + 1)})</span>` : '<span class="state">Pas encore remis</span>')}<span id="rem-msg" class="muted" role="status"></span></div>`
       : `<div class="row wrapr"><button type="button" class="btn primary" id="remettre" ${remis ? 'disabled' : ''}>${remis ? 'Dossier remis' : (d.remises || 0) >= 1 ? `Remettre le dossier (${nomRemise((d.remises || 0) + 1)})` : 'Remettre le dossier'}</button>${d.correction ? '<button type="button" class="btn" data-goto="correction">Voir la correction</button>' : remis && ONLINE ? '<span class="muted">En attente de la correction du professeur. Pour le modifier encore, demandez-lui de vous rendre le dossier.</span>' : ''}<span id="rem-msg" class="muted" role="status"></span></div>`}`;
   sheet.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.goto }))));
   if (prof && PV.photoId && !IMPRESSION) {
@@ -1455,7 +1457,12 @@ function demarrerEnLigne() {
   window.addEventListener('storage', e => { if (e.key === 'tp3pelec:cle' && e.newValue && !USER) demarrerEnLigne(); });
   window.addEventListener('online', () => rafraichir());
   window.addEventListener('offline', () => setSync('hors'));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushDirty(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') return flushDirty();
+    // retour dans l'app : le professeur a peut-être rendu ou corrigé le dossier entre-temps
+    Object.keys(FETCHED).forEach(k => delete FETCHED[k]);
+    if (USER && USER.role === 'eleve' && VIEW.page === 'ex') go(VIEW);
+  });
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   demarrerEnLigne();
 })();

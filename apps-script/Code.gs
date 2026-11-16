@@ -546,7 +546,7 @@ function profRendre_(email, ex) {
     const { rows, i } = ligneDossier_(email, ex);
     if (i < 0) throw new Error('Dossier introuvable.');
     const r = rows[i], sh = onglet_('dossiers');
-    const corr = json_(r[8], null);
+    const corr = r[9] === true ? json_(r[8], null) : null; // seule une correction publiée part dans l'historique (un brouillon reste au prof)
     if (corr) {
       // la correction déjà faite part dans l'historique, comme pour une reprise par l'élève
       const hist = json_(r[11], []);

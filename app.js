@@ -870,7 +870,7 @@ function remiseSheet(sheet, ex, d) {
     </div>
     ${prof
       ? `<div class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span><button type="button" class="btn primary" data-goto="correction">Corriger</button><button type="button" class="btn ghost" id="rendre">Rendre le dossier à l\'élève</button>' : '<span class="state">Pas encore remis</span>'}<span id="rem-msg" class="muted" role="status"></span></div>`
-      : `<div class="row wrapr"><button type="button" class="btn primary" id="remettre" ${remis ? 'disabled' : ''}>${remis ? 'Dossier remis' : (d.remises || 0) >= 1 ? `Remettre le dossier (${nomRemise((d.remises || 0) + 1)})` : 'Remettre le dossier'}</button>${d.correction ? '<button type="button" class="btn" data-goto="correction">Voir la correction</button>' : remis && ONLINE ? '<span class="muted">En attente de la correction du professeur.</span>' : ''}<span id="rem-msg" class="muted" role="status"></span></div>`}`;
+      : `<div class="row wrapr"><button type="button" class="btn primary" id="remettre" ${remis ? 'disabled' : ''}>${remis ? 'Dossier remis' : (d.remises || 0) >= 1 ? `Remettre le dossier (${nomRemise((d.remises || 0) + 1)})` : 'Remettre le dossier'}</button>${d.correction ? '<button type="button" class="btn" data-goto="correction">Voir la correction</button>' : remis && ONLINE ? '<span class="muted">En attente de la correction du professeur. Pour le modifier encore, demandez-lui de vous rendre le dossier.</span>' : ''}<span id="rem-msg" class="muted" role="status"></span></div>`}`;
   sheet.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => go(Object.assign({}, VIEW, { tab: b.dataset.goto }))));
   if (prof && PV.photoId && !IMPRESSION) {
     $('#photo-prev').innerHTML = '<p class="muted">Chargement de la photo…</p>';
@@ -1125,7 +1125,7 @@ function correctionSheet(sheet, ex, v, d) {
           <textarea id="g-com" rows="4" placeholder="Points forts, points à revoir, conseil pour la prochaine fois…">${esc(saved && saved.commentaire || '')}</textarea>
           <div class="row wrapr"><button type="button" class="btn" id="g-save">Enregistrer le brouillon</button>
             <button type="button" class="btn primary" id="g-pub" ${PV.remis ? '' : 'disabled title="Le dossier doit être remis"'}>${PV.publiee ? 'Republier' : 'Publier à l\'élève'}</button></div>
-          ${PV.remis && PV.publiee ? '<div class="corr-again"><p class="muted small">L\'élève peut encore améliorer son dossier ? Rendez-le-lui : il le corrige et le remet une nouvelle fois (sans limite). Cette correction reste dans l\'historique.</p><button type="button" class="btn" id="g-rendre">Rendre le dossier à l\'élève</button></div>' : ''}
+          ${PV.remis ? `<div class="corr-again"><p class="muted small">${PV.publiee ? 'L\'élève peut encore améliorer son dossier ? Rendez-le-lui : il le corrige et le remet une nouvelle fois (sans limite). Cette correction reste dans l\'historique.' : 'Vous pouvez aussi rendre le dossier sans le corriger : l\'élève le modifie et le remet une nouvelle fois (sans limite).'}</p><button type="button" class="btn" id="g-rendre">Rendre le dossier à l'élève</button></div>` : ''}
           <p id="g-msg" class="muted small" role="status"></p>
         </div>
         <div class="corr-main"><h3>Correction automatique</h3>
@@ -1207,7 +1207,7 @@ function correctionSheet(sheet, ex, v, d) {
       <div class="corr-side"><h3>Votre évaluation</h3>${htmlGrille(corr.grille || {}, false)}
         ${corr.commentaire ? `<div class="corr-comment"><span class="k">Commentaire du professeur</span><p>${esc(corr.commentaire)}</p></div>` : ''}
         ${peutReprendre ? `<div class="corr-again"><p>Vous pouvez corriger votre dossier et le remettre <b>une seconde fois</b>. Les deux résultats sont gardés.</p>
-          <button type="button" class="btn primary" id="reprendre">Corriger et remettre</button><p id="rep-msg" class="muted small" role="status"></p></div>` : ((d.remises || 0) >= 2 ? '<p class="muted small">Vous voulez encore améliorer votre dossier ? Demandez à votre professeur de vous le rendre.</p>' : '')}
+          <button type="button" class="btn primary" id="reprendre">Corriger et remettre</button><p id="rep-msg" class="muted small" role="status"></p></div>` : (!d.remis ? '<p class="muted small">Votre dossier vous a été rendu : corrigez-le, puis remettez-le dans l\'onglet Remise.</p>' : (d.remises || 0) >= 2 ? '<p class="muted small">Vous voulez encore améliorer votre dossier ? Demandez à votre professeur de vous le rendre.</p>' : '')}
       </div>
       <div class="corr-main"><h3>Le détail</h3>${htmlParties(corr.parties || [])}<div class="an-eleve"></div>${histE.length ? `<h3>Remises précédentes</h3>${htmlHist(false)}` : ''}</div>
     </div>`;

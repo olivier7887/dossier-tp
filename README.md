@@ -34,6 +34,7 @@ Dépôt › **Settings › Pages** › Source : *Deploy from a branch* › Branc
 - **Élèves** : ouvrir l'app, « Se connecter avec mon compte de l'école », puis « Ouvrir Dossier TP ». La connexion est gardée 180 jours. Le travail s'enregistre sur l'appareil et part dans le Sheet dès qu'il y a internet. Remettre un dossier (avec la photo) demande internet.
 - **Profs** : ajouter une adresse dans l'onglet **Profs**. Bloquer un élève : ajouter son adresse dans **Bloqués**.
 - **Classes** : une ligne par classe dans l'onglet **Classes**, avec l'adresse du professeur et, si besoin, celle d'un 2e professeur en colonne C (listes déroulantes tirées de l'onglet Profs). Les deux voient la classe dans « Mes élèves ». Les élèves choisissent leur classe et leur professeur dans l'app.
+- **Groupes de CT** : quand une classe est divisée autrement pour le cours théorique (ex. 3QEM : 3 groupes de TP, 2 groupes de CT), ajoutez une ligne par groupe de CT avec **CT** en colonne E (« Type »). Son nom commence par le même mot que les groupes de TP (« 3QEM CT A », « 3QEM CT B »). L'élève choisit alors son groupe de TP et son groupe de CT ; un professeur voit dans « Mes élèves » les élèves de ses groupes de TP et de ses groupes de CT.
 - **Propriétaire** : le prof dont la remarque, dans l'onglet Profs, contient « Propriétaire » voit le bouton **Nouvelle année scolaire** (archive dans le Drive, puis remise à zéro des élèves et des dossiers).
 - **Catalogue** : modifiable depuis l'app (page Catalogue, mode prof) ou directement dans l'onglet Catalogue.
 

@@ -1444,7 +1444,26 @@ function demarrerEnLigne() {
   VIEW = { page: 'home' }; render();
   rafraichir();
 }
-(function start() {
+/* ---------- ouverture depuis la Plateforme technique ----------
+   #plateforme : bouton « ← Plateforme » pour y revenir · #pt=… : ticket de connexion de la plateforme */
+const PLATEFORME_URL = 'https://isr-maintenance.github.io/plateforme/';
+function boutonPlateforme() {
+  try { if (/(^|[#&])plateforme(&|$)/.test(location.hash)) sessionStorage.setItem('depuisPlateforme', '1'); if (sessionStorage.getItem('depuisPlateforme') !== '1') return; } catch (e) { return; }
+  const b = document.createElement('a');
+  b.href = PLATEFORME_URL; b.textContent = '← Plateforme'; b.title = 'Revenir à la plateforme technique';
+  b.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9999;background:#1d1d1f;color:#fff;font:600 14px/1 system-ui,sans-serif;padding:10px 14px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+  b.onclick = e => { if (window.opener && !window.opener.closed) { e.preventDefault(); try { window.opener.focus(); } catch (x) {} window.close(); setTimeout(() => { location.href = PLATEFORME_URL; }, 300); } };
+  document.body.appendChild(b);
+}
+async function connexionPlateforme() {
+  const m = location.hash.match(/pt=([\w.\-]+)/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  try { const r = await api('sso', { ticket: m[1] }); store.set('tp3pelec:cle', r.cle); }
+  catch (e) { LOGIN_MSG = 'Connexion par la plateforme impossible : ' + e.message; }
+}
+(async function start() {
+  boutonPlateforme();
   if (!ONLINE) {
     loadCatalogue();
     const last = store.get('tp3pelec:session', null);
@@ -1454,6 +1473,7 @@ function demarrerEnLigne() {
   }
   const m = location.hash.match(/cle=([\w.\-]+)/);
   if (m) { store.set('tp3pelec:cle', m[1]); history.replaceState(null, '', location.pathname + location.search); }
+  await connexionPlateforme();
   window.addEventListener('storage', e => { if (e.key === 'tp3pelec:cle' && e.newValue && !USER) demarrerEnLigne(); });
   window.addEventListener('online', () => rafraichir());
   window.addEventListener('offline', () => setSync('hors'));

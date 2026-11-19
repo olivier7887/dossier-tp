@@ -18,6 +18,8 @@
 const DOMAINE = 'elmarche.be';
 const APP_URL = 'https://olivier7887.github.io/dossier-tp/';
 const DUREE_CLE_JOURS = 180;
+// Plateforme technique (isr-maintenance) : elle ouvre l'app avec un ticket de connexion qu'on fait vérifier ici
+const PLATEFORME_API = 'https://script.google.com/macros/s/AKfycbxPDMqJni1QwgLjrAV3RBmTDXeAX1MWN47cAis_I3V0VckDQEx4eq8oDxK-upmSAWX1Pw/exec';
 
 const ONGLETS = {
   profs: { nom: 'Profs', entetes: ['Adresse', 'Nom', 'Remarque'] },
@@ -122,6 +124,7 @@ function doPost(e) {
   let rep;
   try {
     const q = JSON.parse(e.postData.contents);
+    if (q.a === 'sso') { rep = { ok: true, data: sso_(String(q.ticket || '')) }; return ContentService.createTextOutput(JSON.stringify(rep)).setMimeType(ContentService.MimeType.JSON); }
     const email = verifier_(q.cle);
     const u = utilisateur_(email);
     const fn = ACTIONS[q.a];
@@ -181,6 +184,20 @@ function verifier_(cle) {
   const p = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(pad)).getDataAsString());
   if (!p.e || Date.now() > p.x) throw erreurAuth_('Votre connexion a expiré : reconnectez-vous.');
   return String(p.e).toLowerCase();
+}
+
+/* =========================================================
+   Connexion depuis la Plateforme technique
+   La plateforme remet à l'élève un ticket de 2 minutes ; on le fait vérifier par la plateforme,
+   puis on délivre la clé habituelle de Dossier TP (mêmes règles que la connexion Google : Profs, Bloqués…).
+   ========================================================= */
+function sso_(ticket) {
+  if (!ticket) throw erreurAuth_('Ticket de connexion manquant.');
+  const r = UrlFetchApp.fetch(PLATEFORME_API, { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ a: 'ssoCheck', p: { ticket, app: 'dossier' } }), muteHttpExceptions: true, followRedirects: true });
+  let j; try { j = JSON.parse(r.getContentText()); } catch (e) { throw new Error('La plateforme ne répond pas : réessayez.'); }
+  if (!j.ok) throw erreurAuth_(j.msg || 'Connexion par la plateforme refusée.');
+  const u = utilisateur_(String(j.mail).toLowerCase());
+  return { cle: signer_({ e: u.email, r: u.role, x: Date.now() + DUREE_CLE_JOURS * 864e5 }) };
 }
 
 /* =========================================================

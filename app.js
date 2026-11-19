@@ -8,7 +8,7 @@ const ONLINE = !!(CFG.apiUrl && CFG.loginUrl);
 const DOMAINE = 'elmarche.be';
 const PROFS_DEMO = ['olivier.lesenfants@elmarche.be'];
 const LISTES_DEMO = {
-  classes: [['3P Élec', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 1', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 2', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 3', 'gregory.baudson@elmarche.be'], ['3P Poly', 'logan.degossly@elmarche.be'], ['3QEM CT A', 'olivier.lesenfants@elmarche.be', 'ct'], ['3QEM CT B', 'philippe.dachelet@elmarche.be', 'ct']].map(([classe, prof, type]) => ({ classe, prof, prof2: '', type: type || 'tp' })),
+  classes: [['3P Élec', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 1', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 2', 'olivier.lesenfants@elmarche.be'], ['3QEM groupe 3', 'gregory.baudson@elmarche.be'], ['3P Poly', 'logan.degossly@elmarche.be']].map(([classe, prof]) => ({ classe, prof, prof2: '' })),
   profs: [['olivier.lesenfants@elmarche.be', 'Lesenfants Olivier'], ['philippe.dachelet@elmarche.be', 'Dachelet Philippe'], ['gregory.baudson@elmarche.be', 'Baudson Grégory'], ['logan.degossly@elmarche.be', 'Degossly Logan']].map(([email, nom]) => ({ email, nom })),
 };
 const $ = (s, r = document) => r.querySelector(s);
@@ -31,17 +31,10 @@ const nomProf = em => { const p = LISTES.profs.find(x => x.email === em); return
 const profDeClasse = c => (LISTES.classes.find(x => x.classe === c) || {}).prof || '';
 const profsDeClasse = c => { const x = LISTES.classes.find(k => k.classe === c); return x ? [x.prof, x.prof2].filter(Boolean) : []; };
 const classeDuProf = (c, em) => c.prof === em || c.prof2 === em;
-// groupes : TP (par défaut) ou CT (cours théorique) ; un élève a un groupe de TP (« classe ») et, si sa classe est divisée pour le CT, un groupe de CT
-const estCT = c => c.type === 'ct';
-const groupesTP = () => LISTES.classes.filter(c => !estCT(c));
-const motCle = n => String(n || '').trim().split(/\s+/)[0].toLowerCase();
-// groupes de CT de la même classe que le groupe de TP (même premier mot : « 3QEM groupe 1 » → « 3QEM CT A »)
-const groupesCTde = classe => { const k = motCle(classe); return k ? LISTES.classes.filter(c => estCT(c) && motCle(c.classe) === k) : []; };
 function profilIncomplet() {
   if (!DATA.profil.confirme) return true;
   if (!LISTES.classes.length) return false;
-  const p = DATA.profil, cts = groupesCTde(p.classe);
-  return !groupesTP().some(c => c.classe === p.classe) || (LISTES.profs.length > 0 && !p.prof) || (cts.length > 0 && !cts.some(c => c.classe === p.ct));
+  return !LISTES.classes.some(c => c.classe === DATA.profil.classe) || (LISTES.profs.length > 0 && !DATA.profil.prof);
 }
 
 /* ---------- utilisateur ---------- */
@@ -279,29 +272,24 @@ function bindLogin() {
 function profilView(main) {
   const p = DATA.profil, deja = p.confirme, listes = LISTES.classes.length > 0;
   const profSel = p.prof || profDeClasse(p.classe);
-  const classes = groupesTP().map(c => c.classe);
-  const optCT = classe => { const l = groupesCTde(classe); return l.length ? `<option value="">Choisir mon groupe de CT…</option>${l.map(c => `<option ${c.classe === p.ct ? 'selected' : ''}>${esc(c.classe)}</option>`).join('')}` : ''; };
+  const classes = LISTES.classes.map(c => c.classe);
   main.innerHTML = `<section class="card narrow">
     <h1>${deja ? 'Ma classe' : 'Bienvenue'}</h1>
     <p>${deja ? 'Choisissez votre classe et votre professeur dans les listes, puis confirmez.' : "Votre nom a été lu dans votre adresse e-mail. Une adresse n'a pas d'accents : corrigez si besoin. Choisissez ensuite votre classe et votre professeur, puis confirmez. Votre nom apparaîtra sur toutes vos feuilles."}</p>
     <form id="pf" class="form-grid">
       <label>Prénom <input id="pf-prenom" required value="${esc(p.prenom)}"></label>
       <label>Nom <input id="pf-nom" required value="${esc(p.nom)}"></label>
-      ${listes ? `<label>Classe (groupe de TP) <select id="pf-classe" required><option value="">Choisir ma classe…</option>${classes.map(c => `<option ${c === p.classe ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-      <label>Professeur <select id="pf-prof" ${LISTES.profs.length ? 'required' : ''}><option value="">Choisir mon professeur…</option>${LISTES.profs.map(x => `<option value="${esc(x.email)}" ${x.email === profSel ? 'selected' : ''}>${esc(x.nom)}</option>`).join('')}</select></label>
-      <label id="pf-ct-l" ${groupesCTde(p.classe).length ? '' : 'hidden'}>Groupe de cours théorique (CT) <select id="pf-ct">${optCT(p.classe)}</select></label>`
+      ${listes ? `<label>Classe <select id="pf-classe" required><option value="">Choisir ma classe…</option>${classes.map(c => `<option ${c === p.classe ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+      <label>Professeur <select id="pf-prof" ${LISTES.profs.length ? 'required' : ''}><option value="">Choisir mon professeur…</option>${LISTES.profs.map(x => `<option value="${esc(x.email)}" ${x.email === profSel ? 'selected' : ''}>${esc(x.nom)}</option>`).join('')}</select></label>`
         : `<label>Classe <input id="pf-classe" value="${esc(p.classe)}"></label>`}
       <div class="row wrapr"><button class="btn primary" type="submit">Confirmer</button>${deja && !profilIncomplet() ? '<button type="button" class="btn ghost" id="pf-annul">Annuler</button>' : ''}</div>
     </form></section>`;
   const sc = $('#pf-classe'), sp = $('#pf-prof');
   if (sp) sc.addEventListener('change', () => { const d = profDeClasse(sc.value); if (d && LISTES.profs.some(x => x.email === d)) sp.value = d; });
-  const sct = $('#pf-ct'), lct = $('#pf-ct-l');
-  const majCT = () => { if (!sct) return; const v = sct.value; sct.innerHTML = optCT(sc.value); if ([...sct.options].some(o => o.value === v)) sct.value = v; lct.hidden = !groupesCTde(sc.value).length; sct.required = !lct.hidden; };
-  if (sct) { sc.addEventListener('change', majCT); majCT(); }
   const an = $('#pf-annul'); if (an) an.addEventListener('click', () => go({ page: 'home' }));
   $('#pf').addEventListener('submit', e => {
     e.preventDefault();
-    Object.assign(DATA.profil, { prenom: $('#pf-prenom').value.trim(), nom: $('#pf-nom').value.trim(), classe: sc.value.trim(), prof: sp ? sp.value : (p.prof || ''), ct: sct && !lct.hidden ? sct.value : '', confirme: true });
+    Object.assign(DATA.profil, { prenom: $('#pf-prenom').value.trim(), nom: $('#pf-nom').value.trim(), classe: sc.value.trim(), prof: sp ? sp.value : (p.prof || ''), confirme: true });
     if (ONLINE) { DATA.profilDirty = true; persist(); flushProfil(); } else save();
     go({ page: 'home' });
   });
@@ -1271,14 +1259,13 @@ let ELEVES = null, FILTRE_ELEVES = '', FILTRE_CLASSE = '';
 let VUE_ELEVES = store.get('tp3pelec:vue-eleves', null);
 const profEleve = e => e.prof || profDeClasse(e.classe);
 // un élève est « à moi » s'il m'a choisi, ou si je suis l'un des (au plus 2) professeurs de sa classe
-const estMonEleve = e => e.prof === USER.email || profsDeClasse(e.classe).includes(USER.email) || profsDeClasse(e.ct).includes(USER.email);
+const estMonEleve = e => e.prof === USER.email || profsDeClasse(e.classe).includes(USER.email);
 const nomsProfsEleve = e => { const l = [...new Set([e.prof, ...profsDeClasse(e.classe)].filter(Boolean))]; return l.map(nomProf).join(' / '); };
 function vueEleves() {
   if (VUE_ELEVES) return VUE_ELEVES;
   return LISTES.classes.some(c => classeDuProf(c, USER.email)) || (ELEVES || []).some(estMonEleve) ? 'mes' : 'tous';
 }
-function classesConnues() { return [...new Set([...LISTES.classes.map(c => c.classe), ...(ELEVES || []).flatMap(e => [e.classe, e.ct]).filter(Boolean)])]; }
-const typeGroupe = g => (LISTES.classes.find(c => c.classe === g) || {}).type === 'ct' || (!LISTES.classes.some(c => c.classe === g) && (ELEVES || []).some(e => e.ct === g)) ? 'ct' : 'tp';
+function classesConnues() { return [...new Set([...LISTES.classes.map(c => c.classe), ...(ELEVES || []).map(e => e.classe).filter(Boolean)])]; }
 function profHome(main) {
   main.innerHTML = `
     ${ONLINE ? `<section class="hello"><h1>Élèves</h1><p>Cliquez sur une case pour ouvrir le dossier d'un élève : schémas, bon de commande, photo. Sur le bon de commande du TP 0, vous validez le matériel de la planche.</p></section>
@@ -1313,18 +1300,16 @@ function profHome(main) {
   const majFiltres = () => {
     const vue = vueEleves();
     main.querySelectorAll('[data-vue]').forEach(b => { b.classList.toggle('on', b.dataset.vue === vue); b.setAttribute('aria-pressed', b.dataset.vue === vue); });
-    const cls = classesConnues().filter(c => vue === 'tous' || LISTES.classes.some(x => x.classe === c && classeDuProf(x, USER.email)) || (ELEVES || []).some(e => (e.classe === c || e.ct === c) && estMonEleve(e)));
+    const cls = classesConnues().filter(c => vue === 'tous' || LISTES.classes.some(x => x.classe === c && classeDuProf(x, USER.email)) || (ELEVES || []).some(e => e.classe === c && estMonEleve(e)));
     if (FILTRE_CLASSE && !cls.includes(FILTRE_CLASSE)) FILTRE_CLASSE = '';
-    const tp = cls.filter(c => typeGroupe(c) === 'tp'), ct = cls.filter(c => typeGroupe(c) === 'ct');
-    const opts = l => l.map(c => `<option ${c === FILTRE_CLASSE ? 'selected' : ''}>${esc(c)}</option>`).join('');
-    $('#el-classe').innerHTML = `<option value="">Toutes</option>${ct.length ? `<optgroup label="Groupes de TP">${opts(tp)}</optgroup><optgroup label="Groupes de CT">${opts(ct)}</optgroup>` : opts(tp)}`;
+    $('#el-classe').innerHTML = `<option value="">Toutes</option>${cls.map(c => `<option ${c === FILTRE_CLASSE ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
   };
   const draw = () => {
     const box = $('#eleves'); if (!box) return;
     majFiltres();
     if (!ELEVES) return;
     const q = FILTRE_ELEVES.trim().toLowerCase(), vue = vueEleves();
-    const list = ELEVES.filter(e => (vue === 'tous' || estMonEleve(e)) && (!FILTRE_CLASSE || e.classe === FILTRE_CLASSE || e.ct === FILTRE_CLASSE) && (!q || `${e.nom} ${e.prenom} ${e.classe} ${e.ct || ''} ${e.email}`.toLowerCase().includes(q)));
+    const list = ELEVES.filter(e => (vue === 'tous' || estMonEleve(e)) && (!FILTRE_CLASSE || e.classe === FILTRE_CLASSE) && (!q || `${e.nom} ${e.prenom} ${e.classe} ${e.email}`.toLowerCase().includes(q)));
     $('#el-compte').textContent = list.length ? `${list.length} élève${list.length > 1 ? 's' : ''}${vue === 'mes' ? ' dans vos classes' : ''}` : '';
     if (!list.length) {
       box.innerHTML = `<p class="empty">${!ELEVES.length ? 'Aucun élève ne s\'est encore connecté.' : vue === 'mes' && !q && !FILTRE_CLASSE ? 'Aucun de vos élèves ne s\'est encore connecté. <button type="button" class="as-link" data-vue="tous">Voir tous les élèves</button>' : 'Aucun élève ne correspond.'}</p>`;
@@ -1333,7 +1318,7 @@ function profHome(main) {
     }
     box.innerHTML = `<table class="tbl eleves"><thead><tr><th>Élève</th><th>Classe</th><th class="c">Planche</th>${EXERCICES.map(x => `<th class="c">TP ${x.num}</th>`).join('')}</tr></thead>
       <tbody>${list.map(e => `<tr><td><b>${esc(e.nom)}</b> ${esc(e.prenom)}<span class="muted small mail">${esc(e.email)}</span></td>
-        <td><span class="cl-cell"><span>${esc(e.classe || '—')}<span class="muted small mail">${esc(nomsProfsEleve(e) || 'sans professeur')}</span>${e.ct ? `<span class="small mail">CT : ${esc(e.ct)}${profsDeClasse(e.ct).length ? ` <span class="muted">(${esc(profsDeClasse(e.ct).map(nomProf).join(' / '))})</span>` : ''}</span>` : ''}</span><button type="button" class="ibtn small-i" data-aff="${esc(e.email)}" title="Changer la classe, le groupe de CT ou le professeur" aria-label="Changer la classe ou le professeur de ${esc(e.prenom)} ${esc(e.nom)}">✎</button></span></td>
+        <td><span class="cl-cell"><span>${esc(e.classe || '—')}<span class="muted small mail">${esc(nomsProfsEleve(e) || 'sans professeur')}</span></span><button type="button" class="ibtn small-i" data-aff="${esc(e.email)}" title="Changer la classe ou le professeur" aria-label="Changer la classe ou le professeur de ${esc(e.prenom)} ${esc(e.nom)}">✎</button></span></td>
         <td class="c">${e.planche ? '<span class="state ok">validée</span>' : '<span class="muted">—</span>'}</td>
         ${EXERCICES.map(x => { const st = e.ex[x.id]; const lbl = st ? (st.corrige && st.remis ? 'corrigé' : st.remis ? 'à corriger' : 'en cours') : '—'; const cls = st ? (st.corrige && st.remis ? 'ok' : st.remis ? 'todo' : 'cur') : '';
           return `<td class="c"><button type="button" class="cell-btn state ${cls}" data-el="${esc(e.email)}" data-x="${x.id}" data-remis="${st && st.remis ? 1 : 0}" title="TP ${x.num} – ${esc(e.prenom)} ${esc(e.nom)}">${lbl}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
@@ -1352,29 +1337,25 @@ function profHome(main) {
 function openAffecter(e, redraw) {
   if (!e) return;
   const dlg = $('#dlg');
-  const classes = [...new Set([...groupesTP().map(c => c.classe), e.classe].filter(Boolean))];
-  const cts = () => { const l = groupesCTde($('#af-c', dlg) ? $('#af-c', dlg).value : e.classe); return [...new Set([...(l.length ? l : LISTES.classes.filter(estCT)).map(c => c.classe), e.ct].filter(Boolean))]; };
+  const classes = [...new Set([...LISTES.classes.map(c => c.classe), e.classe].filter(Boolean))];
   const pr = profEleve(e);
-  dlg.innerHTML = `<div class="dlg-in dlg-petit"><div class="dlg-head"><div><span class="eyebrow">Classe, groupe de CT et professeur</span><h2>${esc(e.prenom)} ${esc(e.nom)}</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
+  dlg.innerHTML = `<div class="dlg-in dlg-petit"><div class="dlg-head"><div><span class="eyebrow">Classe et professeur</span><h2>${esc(e.prenom)} ${esc(e.nom)}</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
     <form id="af" class="form-grid">
-      <label>Classe (groupe de TP) <select id="af-c"><option value="">—</option>${classes.map(c => `<option ${c === e.classe ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-      <label id="af-ct-l">Groupe de CT <select id="af-ct"></select></label>
+      <label>Classe <select id="af-c"><option value="">—</option>${classes.map(c => `<option ${c === e.classe ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <label>Professeur <select id="af-p"><option value="">—</option>${LISTES.profs.map(x => `<option value="${esc(x.email)}" ${x.email === pr ? 'selected' : ''}>${esc(x.nom)}</option>`).join('')}</select></label>
       <p class="muted small">Une classe ou un professeur manque ? Ajoutez-le dans l'onglet Classes ou Profs du Google Sheet, puis actualisez l'app.</p>
       <p id="af-msg" class="err" role="status"></p>
       <div class="row wrapr"><button type="submit" class="btn primary">Enregistrer</button><button type="button" class="btn ghost" data-close>Annuler</button></div>
     </form></div>`;
   dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
-  const sc = $('#af-c', dlg), sp = $('#af-p', dlg), sct = $('#af-ct', dlg);
-  const majCT = () => { const v = sct.value || e.ct || ''; const l = cts(); sct.innerHTML = `<option value="">— (pas de groupe de CT)</option>${l.map(c => `<option ${c === v ? 'selected' : ''}>${esc(c)}</option>`).join('')}`; $('#af-ct-l', dlg).hidden = !l.length; };
-  majCT();
-  sc.addEventListener('change', () => { const d = profDeClasse(sc.value); if (d) sp.value = d; majCT(); });
+  const sc = $('#af-c', dlg), sp = $('#af-p', dlg);
+  sc.addEventListener('change', () => { const d = profDeClasse(sc.value); if (d) sp.value = d; });
   $('#af', dlg).addEventListener('submit', async ev => {
     ev.preventDefault();
     const btn = dlg.querySelector('[type=submit]'); btn.disabled = true;
     try {
-      await api('profAffecter', { email: e.email, classe: sc.value, prof: sp.value, ct: sct.value });
-      e.classe = sc.value; e.prof = sp.value; e.ct = sct.value; dlg.close(); redraw();
+      await api('profAffecter', { email: e.email, classe: sc.value, prof: sp.value });
+      e.classe = sc.value; e.prof = sp.value; dlg.close(); redraw();
     } catch (err) { btn.disabled = false; $('#af-msg', dlg).textContent = err.message; }
   });
   dlg.showModal();

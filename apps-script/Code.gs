@@ -23,9 +23,9 @@ const PLATEFORME_API = 'https://script.google.com/macros/s/AKfycbxPDMqJni1QwgLjr
 
 const ONGLETS = {
   profs: { nom: 'Profs', entetes: ['Adresse', 'Nom', 'Remarque'] },
-  classes: { nom: 'Classes', entetes: ['Classe ou groupe', 'Professeur (adresse)', 'Professeur 2 (facultatif)', 'Remarque', 'Type (TP ou CT)'] },
+  classes: { nom: 'Classes', entetes: ['Classe', 'Professeur (adresse)', 'Professeur 2 (facultatif)', 'Remarque'] },
   bloques: { nom: 'Bloqués', entetes: ['Adresse', 'Raison', 'Date'] },
-  eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion', 'Professeur', 'Groupe CT'] },
+  eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion', 'Professeur'] },
   dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique', 'Schémas à la main', 'Essai (prof)'] },
   exercices: { nom: 'Exercices', entetes: ['id', 'N°', 'Titre', 'Définition (JSON)', 'Auteur', 'Modifié le', 'Visible'] },
   catalogue: { nom: 'Catalogue', entetes: ['id', 'Catégorie', 'Description', 'Référence', 'Marque', 'Unité', 'Prix HTVA', 'Couleur', 'Visible', 'À vérifier'] },
@@ -64,8 +64,6 @@ function installer() {
   // liste déroulante : le professeur d'une classe est choisi parmi les adresses de l'onglet Profs
   cls.getRange('B2:C200').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(profs.getRange('A2:A200'), true).setAllowInvalid(false).build());
   cls.setColumnWidth(1, 160); cls.setColumnWidth(2, 280); cls.setColumnWidth(3, 280);
-  // type du groupe : TP (par défaut, case vide) ou CT (cours théorique) ; un élève est dans un groupe de TP et, si besoin, un groupe de CT
-  cls.getRange('E2:E200').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['TP', 'CT'], true).setAllowInvalid(false).build());
   const cat = ss.getSheetByName(ONGLETS.catalogue.nom);
   if (cat.getLastRow() < 2) {
     const rows = CATALOGUE_INITIAL;
@@ -162,7 +160,7 @@ const ACTIONS = {
   profEssai: (u, q) => (prof_(u), profEssai_(u, String(q.email).toLowerCase(), String(q.ex), q.essai || {})),
   exSauver: (u, q) => (prof_(u), exSauver_(u, q.exercice || {})),
   exVisible: (u, q) => (prof_(u), exVisible_(String(q.id), !!q.visible)),
-  profAffecter: (u, q) => (prof_(u), profAffecter_(String(q.email).toLowerCase(), String(q.classe || ''), String(q.prof || '').toLowerCase(), q.ct === undefined ? null : String(q.ct || ''))),
+  profAffecter: (u, q) => (prof_(u), profAffecter_(String(q.email).toLowerCase(), String(q.classe || ''), String(q.prof || '').toLowerCase())),
   profNouvelleAnnee: (u, q) => (admin_(u), nouvelleAnnee_(String(q.confirmation || ''))),
 };
 // actions refusées si l'app de l'élève date d'une année scolaire archivée
@@ -233,7 +231,7 @@ function admin_(u) { prof_(u); if (!estAdmin_(u.email)) throw new Error('Réserv
 function anneeScolaire_(d) { const y = d.getFullYear(); return d.getMonth() >= 7 ? y + '-' + (y + 1) : (y - 1) + '-' + y; }
 function annee_() { return PropertiesService.getScriptProperties().getProperty('ANNEE') || anneeScolaire_(new Date()); }
 function listeProfs_() { return lignes_('profs').filter(r => String(r[0]).trim()).map(r => ({ email: String(r[0]).trim().toLowerCase(), nom: String(r[1] || '').trim() || nomDepuisEmail_(String(r[0]).trim().toLowerCase()).nom })); }
-function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).trim()).map(r => ({ classe: String(r[0]).trim(), prof: String(r[1] || '').trim().toLowerCase(), prof2: String(r[2] || '').trim().toLowerCase(), type: /^ct$/i.test(String(r[4] || '').trim()) ? 'ct' : 'tp' })); }
+function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).trim()).map(r => ({ classe: String(r[0]).trim(), prof: String(r[1] || '').trim().toLowerCase(), prof2: String(r[2] || '').trim().toLowerCase() })); }
 
 /* =========================================================
    Élève
@@ -246,11 +244,11 @@ function moi_(u) {
     const sh = onglet_('eleves'), rows = lignes_('eleves'), now = new Date();
     let i = rows.findIndex(r => String(r[0]).toLowerCase() === u.email);
     if (i < 0) {
-      const n = nomDepuisEmail_(u.email), row = [u.email, n.prenom, n.nom, '', false, false, '', '', '', now, now, '', ''];
+      const n = nomDepuisEmail_(u.email), row = [u.email, n.prenom, n.nom, '', false, false, '', '', '', now, now, ''];
       sh.appendRow(row); rows.push(row); i = rows.length - 1;
     } else sh.getRange(i + 2, 11).setValue(now);
     const r = rows[i];
-    res.profil = { prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), ct: String(r[12] || ''), confirme: r[4] === true };
+    res.profil = { prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), confirme: r[4] === true };
     res.planche = { validee: r[5] === true, lignes: json_(r[6], []) };
     res.resume = {};
     lignes_('dossiers').forEach(d => { if (String(d[0]).toLowerCase() === u.email) res.resume[d[1]] = { maj: d[3] ? new Date(d[3]).getTime() : 0, remis: d[4] === true, corrige: d[9] === true, remises: Number(d[10]) || 0 }; });
@@ -263,12 +261,11 @@ function sauverProfil_(u, p) {
     const rows = lignes_('eleves'), i = rows.findIndex(r => String(r[0]).toLowerCase() === u.email);
     if (i < 0) throw new Error('Profil introuvable.');
     const classe = String(p.classe || '').trim().slice(0, 30), prof = String(p.prof || '').trim().toLowerCase();
-    const classes = listeClasses_(), ct = p.ct === undefined ? String(rows[i][12] || '') : String(p.ct || '').trim().slice(0, 30); // ancienne app : groupe CT inchangé
-    if (classes.length && !classes.some(c => c.classe === classe && c.type === 'tp')) throw new Error('Choisissez votre classe (groupe de TP) dans la liste.');
-    if (ct && !classes.some(c => c.classe === ct && c.type === 'ct')) throw new Error('Choisissez votre groupe de CT dans la liste.');
+    const classes = listeClasses_();
+    if (classes.length && !classes.some(c => c.classe === classe)) throw new Error('Choisissez votre classe dans la liste.');
     if (prof && !listeProfs_().some(x => x.email === prof)) throw new Error('Choisissez votre professeur dans la liste.');
     onglet_('eleves').getRange(i + 2, 2, 1, 4).setValues([[String(p.prenom || '').slice(0, 60), String(p.nom || '').slice(0, 60), classe, true]]);
-    onglet_('eleves').getRange(i + 2, 12, 1, 2).setValues([[prof, ct]]);
+    onglet_('eleves').getRange(i + 2, 12).setValue(prof);
     return true;
   });
 }
@@ -435,7 +432,7 @@ function profEleves_() {
   return lignes_('eleves').map(r => {
     const email = String(r[0]).toLowerCase(), ex = {};
     dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { essai: (json_(d[13], {}) || {}).premier || '', remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 }; });
-    return { email, prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), ct: String(r[12] || ''), planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
+    return { email, prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
   }).sort((a, b) => (String(a.classe) + ' ' + a.nom + ' ' + a.prenom).localeCompare(String(b.classe) + ' ' + b.nom + ' ' + b.prenom));
 }
 function profDossier_(email, ex) {
@@ -459,16 +456,14 @@ function profPhoto_(id) {
   const b = DriveApp.getFileById(id).getBlob();
   return 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes());
 }
-function profAffecter_(email, classe, prof, ct) {
+function profAffecter_(email, classe, prof) {
   if (classe && listeClasses_().length && !listeClasses_().some(c => c.classe === classe)) throw new Error('Classe inconnue : ajoutez-la d\'abord dans l\'onglet Classes.');
-  if (ct && !listeClasses_().some(c => c.classe === ct && c.type === 'ct')) throw new Error('Groupe de CT inconnu : ajoutez-le dans l\'onglet Classes avec le type CT.');
   if (prof && !listeProfs_().some(x => x.email === prof)) throw new Error('Professeur inconnu : ajoutez-le d\'abord dans l\'onglet Profs.');
   return verrou_(() => {
     const rows = lignes_('eleves'), i = rows.findIndex(r => String(r[0]).toLowerCase() === email);
     if (i < 0) throw new Error('Élève introuvable.');
     onglet_('eleves').getRange(i + 2, 4).setValue(classe);
     onglet_('eleves').getRange(i + 2, 12).setValue(prof);
-    if (ct !== null) onglet_('eleves').getRange(i + 2, 13).setValue(ct);
     return true;
   });
 }

@@ -399,9 +399,13 @@ function exView(main) {
         // des modifications locales pas encore envoyées sont gardées, sauf si la copie locale se croit encore « remise »
         if ((DATA.dirty || {})[ex.id] && !r.remis && !(loc && loc.remis)) return;
         if (!loc || (r.maj || 0) >= (loc.maj || 0) || r.remis !== !!loc.remis) {
-          const avant = JSON.stringify(loc);
-          DATA.ex[ex.id] = normEx(r); persist();
-          if (avant !== JSON.stringify(DATA.ex[ex.id]) && VIEW.page === 'ex' && VIEW.id === ex.id) go(VIEW);
+          // IMPORTANT : si rien n'a changé, on ne touche à rien. Remplacer l'objet du dossier sans redessiner
+          // laissait l'éditeur ouvert travailler sur l'ancien objet : ses modifications n'étaient plus enregistrées.
+          const nouveau = normEx(r);
+          if (loc && JSON.stringify(loc) === JSON.stringify(nouveau)) return;
+          if ((DATA.dirty || {})[ex.id] && !(loc && loc.remis) && !r.remis) return; // modifié entre-temps : la version locale gagne
+          DATA.ex[ex.id] = nouveau; persist();
+          if (VIEW.page === 'ex' && VIEW.id === ex.id) go(VIEW); // l'éditeur est reconstruit sur le nouvel objet
         }
       }).catch(e => { if (e.auth) deconnecter(e.message); });
     }

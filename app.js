@@ -1449,9 +1449,12 @@ function demarrerEnLigne() {
   rafraichir();
 }
 /* ---------- ouverture depuis la Plateforme technique ----------
-   #plateforme : bouton « ← Plateforme » pour y revenir · #pt=… : ticket de connexion de la plateforme */
+   #plateforme : bouton « ← Plateforme » pour y revenir · #pt=… : ticket de connexion de la plateforme
+   #plateforme&embed : ouvert dans le panneau de la plateforme, sans bouton retour */
 const PLATEFORME_URL = 'https://isr-maintenance.github.io/plateforme/';
 function boutonPlateforme() {
+  // ouvert DANS la plateforme (panneau, #plateforme&embed) : pas de bouton, la plateforme a le sien
+  try { if (window.parent !== window && (/(^|[#&])embed(&|$)/.test(location.hash) || sessionStorage.getItem('ptEmbed'))) { sessionStorage.setItem('ptEmbed', '1'); return; } } catch (e) {}
   try { if (/(^|[#&])plateforme(&|$)/.test(location.hash)) sessionStorage.setItem('depuisPlateforme', '1'); if (sessionStorage.getItem('depuisPlateforme') !== '1') return; } catch (e) { return; }
   const b = document.createElement('a');
   b.href = PLATEFORME_URL; b.textContent = '← Plateforme'; b.title = 'Revenir à la plateforme technique';

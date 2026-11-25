@@ -417,9 +417,11 @@ function exView(main) {
     <div class="crumbs"><button type="button" class="as-link" data-nav2="home">← ${USER.role === 'prof' ? (CTX.eleve ? 'Mes élèves' : 'Exercices') : 'Mes TP'}</button>
       ${canPrint ? '<span class="row wrapr"><button type="button" class="btn ghost small" id="print">Imprimer cette feuille</button><button type="button" class="btn small" id="print-all">Imprimer tout le dossier</button></span>' : ''}</div>
     ${cartouche(p, ex, tabLbl)}
+    ${USER.role === 'prof' && CTX.eleve && dernierRendu({ historique: PV.historique }, PV.remis) && dernierRendu({ historique: PV.historique }, PV.remis).message ? `<p class="notice prof">Dossier rendu à l'élève avec ce message : « ${esc(dernierRendu({ historique: PV.historique }, PV.remis).message)} »</p>` : ''}
     ${USER.role === 'prof' && CTX.eleve ? `<p class="notice prof">Dossier de <b>${esc(p.prenom)} ${esc(p.nom)}</b> (${esc(email)}) · ${PV.remis ? 'remis' : PV.data && PV.data.maj ? 'en cours' : 'pas encore commencé'}. Consultation : vos modifications ne sont pas enregistrées.</p>` : ''}
     ${USER.role === 'prof' && !CTX.eleve && ex.perso ? `<p class="notice prof">Exercice créé${ex.auteur ? ' par ' + esc(nomProf(ex.auteur)) : ''}${ex.visible === false ? ' · masqué aux élèves' : ''}. <button type="button" class="btn small" id="ex-modif">Modifier cet exercice</button></p>` : ''}
     ${USER.role === 'prof' && !CTX.eleve ? `<p class="notice prof">Aperçu professeur : version de l'exercice pour <b>${esc(email)}</b>.${ONLINE ? ' Rien n\'est enregistré.' : ` <label class="inline">Autre élève <input id="pv-email" type="email" value="${esc(email)}"></label>`}</p>` : ''}
+    ${USER.role === 'eleve' && dernierRendu(d, d.remis) ? (() => { const h = dernierRendu(d, d.remis); return `<div class="notice rendu"><p><b>Votre professeur vous a rendu ce dossier${h.le ? ` (${dateCourte(h.le)})` : ''}.</b> Corrigez-le, puis remettez-le dans l'onglet Remise.</p>${h.message ? `<p class="msg">${esc(h.message)}</p>` : ''}</div>`; })() : ''}
     ${USER.role === 'eleve' && d.remis ? (d.correction && (d.remises || 1) < 2 ? '<p class="notice">Ce dossier est corrigé. Lisez la correction : vous pouvez ensuite le corriger et le remettre une seconde fois.</p>' : d.correction ? '<p class="notice">Ce dossier est corrigé. Pour le corriger encore, demandez à votre professeur de vous le rendre.</p>' : '<p class="notice">Ce dossier est remis : il ne peut plus être modifié en attendant la correction du professeur.</p>') : ''}
     <nav class="tabs" aria-label="Feuilles du dossier">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${k === tab ? 'on' : ''}" aria-current="${k === tab ? 'page' : 'false'}">${l}</button>`).join('')}</nav>
     <section id="sheet" class="sheet"></section>`;
@@ -543,6 +545,17 @@ async function imprimerTout(btn, c) {
         renommer(s2, i + 'm');
       }
     });
+    // dernière page : corrections et messages du professeur (dossier rendu), dans l'ordre
+    const vuProf = USER.role === 'prof' && CTX.eleve;
+    const ent = numeroter(histUtile(vuProf ? PV.historique : d.historique));
+    const corrAct = vuProf ? (PV.publiee ? PV.correction : null) : d.correction;
+    if (ent.length || (corrAct && corrAct.commentaire)) {
+      const pts = c => { const t = totalGrille(c.grille || {}); return `${num(t.tot)} / ${t.max || 215} points`; };
+      const li = ent.map(h => `<li>${h.correction ? `<span class="k">Correction de la ${nomRemise(h.n)}${h.le ? ` (${dateCourte(h.le)})` : ''} : ${pts(h.correction)}</span>${h.correction.commentaire ? `<p>${esc(h.correction.commentaire)}</p>` : ''}` : ''}
+        ${h.message ? `<p class="k">Dossier rendu à l'élève${h.le ? ` le ${dateCourte(h.le)}` : ''} : à corriger ou modifier</p><p>${esc(h.message)}</p>` : (h.rendu && !h.correction ? '<p class="k">Dossier rendu à l\'élève</p>' : '')}</li>`);
+      if (corrAct) li.push(`<li><span class="k">Correction de la ${nomRemise((vuProf ? PV.remises : d.remises) || 1)} (actuelle) : ${pts(corrAct)}</span>${corrAct.commentaire ? `<p>${esc(corrAct.commentaire)}</p>` : ''}</li>`);
+      page('Suivi du dossier', `<div class="sheet"><div class="sheet-head"><div><h2>Suivi du dossier</h2><p>Corrections et messages du professeur, du plus ancien au plus récent.</p></div></div><ol class="suivi-l">${li.join('')}</ol></div>`);
+    }
   } finally { IMPRESSION = false; }
   const fin = () => { eds.forEach(e => e.destroy && e.destroy()); window.removeEventListener('afterprint', fin); if (VIEW.page === 'ex') go(VIEW); };
   $('#pa-retour').addEventListener('click', fin);
@@ -912,10 +925,7 @@ function remiseSheet(sheet, ex, d) {
     d.photoId = ''; persist(); go(VIEW);
   });
   const rendre = $('#rendre');
-  if (rendre) rendre.addEventListener('click', () => {
-    rendre.disabled = true;
-    api('profRendre', { email: CTX.eleve, ex: ex.id }).then(() => { PV = null; ELEVES = null; go(VIEW); }).catch(e => { rendre.disabled = false; $('#rem-msg').textContent = e.message; });
-  });
+  if (rendre) rendre.addEventListener('click', () => ouvrirRendre(ex, () => go(VIEW)));
   sheet.querySelectorAll('[data-photo-in]').forEach(pin => pin.addEventListener('change', async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     pmsg('Préparation de la photo…');
@@ -1078,6 +1088,38 @@ function mainBox(sheet, ex, d, partie) {
 /* ---------- correction (V2) ---------- */
 const ORDRE_G = { erreur: 0, remarque: 1, ok: 2 };
 const nomRemise = n => n === 1 ? 'première remise' : n === 2 ? 'seconde remise' : `remise n° ${n}`;
+// historique d'un dossier : corrections passées et messages du professeur quand il rend le dossier
+const histUtile = hist => (hist || []).filter(h => h && (h.correction || h.message));
+function numeroter(hist) { let k = 0; return hist.map(h => { if (h.correction) k++; return Object.assign({ n: h.remise || k || 1 }, h); }); }
+const blocMessage = (h, cls = '') => h.message ? `<div class="corr-comment msg-rendu ${cls}"><span class="k">À corriger ou modifier${h.le ? ` · rendu le ${dateCourte(h.le)}` : ''}</span><p>${esc(h.message)}</p></div>` : '';
+function htmlHistorique(hist, ouvrirDernier) {
+  const l = numeroter(histUtile(hist));
+  return l.map((h, k) => `<details class="corr-hist" ${ouvrirDernier && k === l.length - 1 ? 'open' : ''}><summary>${h.correction ? `Correction de la ${nomRemise(h.n)} : ${num(totalGrille(h.correction.grille || {}).tot)} points` : `Dossier rendu après la ${nomRemise(h.n)}`}${h.le ? ` <span class="muted small">(${dateCourte(h.le)})</span>` : ''}${h.message ? ' <span class="pill-rem">message</span>' : ''}</summary>
+    ${blocMessage(h)}${h.correction && h.correction.commentaire ? `<div class="corr-comment"><span class="k">Commentaire de la correction</span><p>${esc(h.correction.commentaire)}</p></div>` : ''}${h.correction ? htmlParties(h.correction.parties || []) : ''}</details>`).join('');
+}
+// le dernier « rendu » si le dossier est encore entre les mains de l'élève
+const dernierRendu = (d, remis) => { const h = (d.historique || []).slice(-1)[0]; return !remis && h && h.rendu ? h : null; };
+// boîte de dialogue « Rendre le dossier » : message facultatif pour l'élève
+function ouvrirRendre(ex, apres) {
+  const dlg = $('#dlg'), el = PV.profil || {};
+  dlg.innerHTML = `<div class="dlg-in dlg-petit"><div class="dlg-head"><div><span class="eyebrow">Rendre le dossier</span><h2>${esc(el.prenom || '')} ${esc(el.nom || '')}</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
+    <form id="rd" class="form-grid">
+      <p class="muted">L'élève pourra modifier son dossier puis le remettre (${nomRemise((PV.remises || 0) + 1)}).${PV.publiee ? ' Votre correction reste dans son historique.' : ''}</p>
+      <label>Ce qu'il doit corriger ou modifier <span class="muted small">(facultatif)</span>
+        <textarea id="rd-msg" rows="5" maxlength="3000" placeholder="Ex. : refais le schéma de câblage, la navette du va-et-vient arrive sur la mauvaise borne. Ajoute les bornes Wago au bon de commande."></textarea></label>
+      <p class="muted small">L'élève verra ce message en haut de son dossier. Il est aussi repris dans le dossier imprimé.</p>
+      <p id="rd-err" class="err" role="status"></p>
+      <div class="row wrapr"><button type="submit" class="btn primary">Rendre le dossier</button><button type="button" class="btn ghost" data-close>Annuler</button></div>
+    </form></div>`;
+  dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+  $('#rd', dlg).addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = dlg.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Envoi…';
+    try { await api('profRendre', { email: CTX.eleve, ex: ex.id, message: $('#rd-msg', dlg).value.trim() }); dlg.close(); PV = null; ELEVES = null; apres(); }
+    catch (err) { btn.disabled = false; btn.textContent = 'Rendre le dossier'; $('#rd-err', dlg).textContent = err.message; }
+  });
+  dlg.showModal(); setTimeout(() => { const t = $('#rd-msg', dlg); if (t) t.focus(); }, 50);
+}
 function htmlParties(parties, ouvert, accepter) {
   return parties.map(p => {
     const err = p.F.filter(f => f.g === 'erreur').length, rem = p.F.filter(f => f.g === 'remarque').length;
@@ -1113,7 +1155,7 @@ function correctionSheet(sheet, ex, v, d) {
     const propPF = propositionProduit(ex, v, PV.essaiProf);
     if ((g.produit == null || g.produit === '') && propPF) g.produit = propPF.total;
     if (PV.annot === undefined) PV.annot = (saved && saved.annot) || null;
-    const hist = (PV.historique || []).filter(h => h && h.correction);
+    const hist = histUtile(PV.historique);
     sheet.innerHTML = `${sheetHead('Correction', 'La correction automatique est calculée à partir du dossier de l\'élève. Ajustez les points si besoin, ajoutez un commentaire, puis publiez : l\'élève verra le détail de ses erreurs avec les explications.')}
       <p class="row wrapr">${PV.remis ? '<span class="state ok">Dossier remis</span>' : '<span class="state cur">Pas encore remis</span>'}
         <span class="state">${PV.remises ? maj1(nomRemise(PV.remises)) : 'Aucune remise'}</span>
@@ -1122,7 +1164,7 @@ function correctionSheet(sheet, ex, v, d) {
       ${propPF ? `<p class="muted small">Produit fini proposé d'après la feuille Essais : ${num(propPF.total)} / 45 (réalisation ${num(propPF.real)}, essais ${num(propPF.essais)}, dépannage ${num(propPF.dep)}).</p>` : ''}
       ${PV.photoId && ONLINE ? `<div class="mains-corr"><h3>Photo du montage</h3><p class="muted small">Entourez ou fléchez ce qui ne va pas, ajoutez un mot : l'élève verra la photo annotée avec sa correction.</p>
         <div class="row wrapr"><button type="button" class="btn small" id="an-go">${PV.annot && PV.annot.items.length ? `Modifier les annotations (${PV.annot.items.length})` : 'Annoter la photo'}</button></div><div id="an-prev" class="an-prev"></div></div>` : ''}
-      ${hist.map((h, k) => `<details class="corr-hist"><summary>Correction de la ${nomRemise(k + 1)} : ${num(totalGrille(h.correction.grille || {}).tot)} points${h.le ? ` <span class="muted small">(${dateCourte(h.le)})</span>` : ''}</summary>${h.correction.commentaire ? `<p class="muted small">Commentaire : ${esc(h.correction.commentaire)}</p>` : ''}${htmlParties(h.correction.parties || [])}</details>`).join('')}
+      ${htmlHistorique(hist, false)}
       <div class="corr-grid">
         <div class="corr-side">
           <h3>Grille d'évaluation</h3>
@@ -1166,12 +1208,7 @@ function correctionSheet(sheet, ex, v, d) {
     };
     $('#g-save').addEventListener('click', () => envoyer(false));
     const gr = $('#g-rendre');
-    if (gr) gr.addEventListener('click', () => {
-      if (!gr.dataset.ok) { gr.dataset.ok = '1'; gr.textContent = 'Confirmer : rendre le dossier'; gr.classList.add('danger'); return; }
-      gr.disabled = true; $('#g-msg').textContent = 'Envoi…';
-      api('profRendre', { email: CTX.eleve, ex: ex.id }).then(() => { PV = null; ELEVES = null; go(Object.assign({}, VIEW, { tab: 'remise' })); })
-        .catch(e => { gr.disabled = false; $('#g-msg').textContent = e.message; });
-    });
+    if (gr) gr.addEventListener('click', () => ouvrirRendre(ex, () => go(Object.assign({}, VIEW, { tab: 'remise' }))));
     $('#g-pub').addEventListener('click', () => envoyer(true));
     bindFiches(sheet); bindVoirMains(sheet, PV.mains);
     const anPrev = $('#an-prev', sheet); if (anPrev && PV.annot) blocPhotoAnnotee(anPrev, PV.annot);
@@ -1200,9 +1237,8 @@ function correctionSheet(sheet, ex, v, d) {
   // élève
   const corr = d.correction || (!ONLINE && d.remis ? Object.assign(auto, { commentaire: '', demo: true }) : null);
   // corrections des remises précédentes (gardées quand le dossier est repris ou rendu par le professeur)
-  const histE = (d.historique || []).filter(h => h && h.correction);
-  const htmlHist = ouvrirDernier => histE.map((h, k) => `<details class="corr-hist" ${ouvrirDernier && k === histE.length - 1 ? 'open' : ''}><summary>Correction de la ${nomRemise(k + 1)} : ${num(totalGrille(h.correction.grille || {}).tot)} points</summary>
-    ${h.correction.commentaire ? `<div class="corr-comment"><span class="k">Commentaire du professeur</span><p>${esc(h.correction.commentaire)}</p></div>` : ''}${htmlParties(h.correction.parties || [])}</details>`).join('');
+  const histE = histUtile(d.historique);
+  const htmlHist = ouvrirDernier => htmlHistorique(d.historique, ouvrirDernier);
   if (!corr) {
     sheet.innerHTML = sheetHead('Correction', histE.length && !d.remis ? 'Votre dossier vous a été rendu : corrigez ce qui est indiqué ci-dessous, puis remettez-le (onglet Remise).' : 'La correction apparaîtra ici quand le professeur l\'aura publiée.') + htmlHist(!d.remis);
     bindFiches(sheet); return;

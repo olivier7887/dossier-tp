@@ -147,7 +147,7 @@ const ACTIONS = {
   profDossier: (u, q) => (prof_(u), profDossier_(String(q.email).toLowerCase(), String(q.ex))),
   profPhoto: (u, q) => (prof_(u), profPhoto_(String(q.id))),
   profValiderPlanche: (u, q) => (prof_(u), profValiderPlanche_(u, String(q.email).toLowerCase(), q.lignes || [])),
-  profRendre: (u, q) => (prof_(u), profRendre_(String(q.email).toLowerCase(), String(q.ex))),
+  profRendre: (u, q) => (prof_(u), profRendre_(String(q.email).toLowerCase(), String(q.ex), String(q.message || '').trim().slice(0, 3000), u.email)),
   profCorriger: (u, q) => (prof_(u), profCorriger_(String(q.email).toLowerCase(), String(q.ex), q.correction, !!q.publier)),
   reprendre: (u, q) => reprendre_(u, String(q.ex)),
   catMaj: (u, q) => (prof_(u), catMaj_(q.item || {})),
@@ -416,7 +416,7 @@ function reprendre_(u, ex) {
     if (r[4] !== true || r[9] !== true) throw new Error('Le dossier doit être remis et corrigé avant de pouvoir le reprendre.');
     if ((Number(r[10]) || 0) >= 2) throw new Error('Demandez à votre professeur de vous rendre le dossier pour le remettre encore une fois.');
     const hist = json_(r[11], []);
-    hist.push({ correction: json_(r[8], null), le: new Date().getTime() });
+    hist.push({ correction: json_(r[8], null), le: new Date().getTime(), remise: Number(r[10]) || 0 });
     onglet_('dossiers').getRange(i + 2, 5, 1, 1).setValue(false);
     onglet_('dossiers').getRange(i + 2, 9, 1, 2).setValues([['', false]]);
     onglet_('dossiers').getRange(i + 2, 12).setValue(JSON.stringify(hist));
@@ -557,19 +557,19 @@ function profCorriger_(email, ex, correction, publier) {
     return true;
   });
 }
-function profRendre_(email, ex) {
-  // le professeur rend le dossier : l'élève peut le corriger et le remettre (sans limite de nombre)
+function profRendre_(email, ex, message, par) {
+  // le professeur rend le dossier, avec un message facultatif : l'élève le corrige et le remet (sans limite de nombre)
   return verrou_(() => {
     const { rows, i } = ligneDossier_(email, ex);
     if (i < 0) throw new Error('Dossier introuvable.');
     const r = rows[i], sh = onglet_('dossiers');
     const corr = r[9] === true ? json_(r[8], null) : null; // seule une correction publiée part dans l'historique (un brouillon reste au prof)
-    if (corr) {
-      // la correction déjà faite part dans l'historique, comme pour une reprise par l'élève
+    if (corr || message) {
+      // la correction déjà faite et le message partent dans l'historique, que l'élève lit en retravaillant
       const hist = json_(r[11], []);
-      hist.push({ correction: corr, le: new Date().getTime(), rendu: true });
+      hist.push({ correction: corr, le: new Date().getTime(), rendu: true, message: message || '', par: par || '', remise: Number(r[10]) || 0 });
       sh.getRange(i + 2, 12).setValue(JSON.stringify(hist));
-      sh.getRange(i + 2, 9, 1, 2).setValues([['', false]]);
+      if (corr) sh.getRange(i + 2, 9, 1, 2).setValues([['', false]]);
     }
     sh.getRange(i + 2, 5).setValue(false);
     return true;

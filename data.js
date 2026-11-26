@@ -120,7 +120,6 @@ const CAT_ORDER = ['Socles (mécanismes)', 'Sets de finition', 'Appareils comple
 /* ---------- Outillage ---------- */
 const OUTILLAGE = [
   { groupe: 'Coffre personnel', items: [
-    ['coffre', 'Coffre électricien PVC 410 × 225 × 185'],
     ['marteau', "Marteau d'ajusteur 300 g"],
     ['pince-coupante', 'Pince coupante isolée 1000 V, 160 mm'],
     ['pince-denuder', 'Pince à dénuder isolée 1000 V, 160 mm'],
@@ -135,7 +134,6 @@ const OUTILLAGE = [
     ['metre', 'Mètre ruban 3 m'],
     ['scie-junior', 'Monture de scie junior'],
     ['lunettes', 'Lunettes de protection'],
-    ['cadenas', 'Cadenas 30 mm (consignation)'],
     ['multimetre', 'Multimètre digital (Stanley FatMax)'],
   ]},
   { groupe: "Outillage de l'atelier", items: [
@@ -508,7 +506,7 @@ const FICHES = [
   // Règles
   { id: 'regles-securite', cat: 'Règles', titre: 'Sécurité au TP', sym: null,
     html: `<ul><li>Toute mise sous tension se fait <b>en présence du professeur</b>. Un essai sans accord annule le montage, même s'il fonctionne.</li>
-<li>Tout dépannage se fait <b>hors tension</b> : couper, consigner (cadenas), vérifier l'absence de tension.</li>
+<li>Tout dépannage se fait <b>hors tension</b> : couper, consigner, vérifier l'absence de tension.</li>
 <li>Méthode de dépannage : observer le symptôme, contrôle visuel, contrôle de continuité, trouver le défaut, corriger, redemander l'essai.</li></ul>` },
   { id: 'regles-tva', cat: 'Règles', titre: 'Bon de commande et TVA', sym: null,
     html: `<ul><li>Tout le matériel doit être dans la liste : un oubli vous pénalise, le matériel n'est commandé qu'une fois.</li>

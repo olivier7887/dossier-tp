@@ -33,7 +33,7 @@ const REF_PLANCHE = [
 ];
 const REF_OUTILS = {
   planche: ['metre', 'crayon', 'equerre', 'niveau', 'scie-junior', 'ebavureur', 'ressort-16', 'ressort-20', 'visseuse', 'tv-pz2', 'lunettes'],
-  cablage: ['pince-coupante', 'pince-denuder', 'pince-longbec', 'tv-pz1', 'tv-4', 'jokari', 'tire-fils', 'multimetre', 'cadenas', 'lunettes'],
+  cablage: ['pince-coupante', 'pince-denuder', 'pince-longbec', 'tv-pz1', 'tv-4', 'jokari', 'tire-fils', 'multimetre', 'lunettes'],
 };
 
 /* ---------- outils ---------- */
@@ -542,10 +542,16 @@ function corrigerBdc(ex, v, d, planche) {
     // fils
     const sec = v.devices.some(x => x.type === 'prise') ? '2,5' : '1,5';
     const besoinsFil = longueurFils(st);
-    for (const [coul, L] of Object.entries(besoinsFil)) {
-      const nom = FIL_COUL[coul] || coul;
-      const bon = q(`H07VU-${sec}-${nom}`), autre = q(`H07VU-${sec === '1,5' ? '2,5' : '1,5'}-${nom}`);
-      utilise.add(`H07VU-${sec}-${nom}`); utilise.add(`H07VU-${sec === '1,5' ? '2,5' : '1,5'}-${nom}`);
+    // la phase se tire en brun ou en rouge, au choix : les deux couleurs se valent (commandées ou dessinées)
+    const GROUPES_FIL = { brun: ['brun', 'rouge'], rouge: ['brun', 'rouge'] };
+    const besoinsG = {};
+    for (const [coul, L] of Object.entries(besoinsFil)) { const g = GROUPES_FIL[coul] ? 'brun-rouge' : coul; besoinsG[g] = (besoinsG[g] || 0) + L; }
+    for (const [g, L] of Object.entries(besoinsG)) {
+      const coulGs = g === 'brun-rouge' ? ['brun', 'rouge'] : [g];
+      const noms = coulGs.map(c => FIL_COUL[c] || c), nom = noms.join(' ou ');
+      const autreSec = sec === '1,5' ? '2,5' : '1,5';
+      const bon = noms.reduce((t, n) => t + q(`H07VU-${sec}-${n}`), 0), autre = noms.reduce((t, n) => t + q(`H07VU-${autreSec}-${n}`), 0);
+      noms.forEach(n => { utilise.add(`H07VU-${sec}-${n}`); utilise.add(`H07VU-${autreSec}-${n}`); });
       if (bon + autre === 0) F.push({ g: 'erreur', msg: `Fil ${nom} : votre schéma en utilise environ ${num(L)} m, rien n'est commandé.` });
       else if (!bon && sec === '2,5') F.push({ g: 'erreur', msg: `Fil ${nom} : avec une prise sur le circuit, il faut du 2,5 mm².`, code: '1807', fiche: 'fils' });
       else if (bon + autre < L * 0.8) F.push({ g: 'erreur', msg: `Fil ${nom} : ${num(bon + autre)} m commandés, il en faut environ ${num(L)} m (réserve comprise).` });
@@ -571,7 +577,8 @@ function corrigerTva(v, d) {
 }
 function corrigerOutils(ex, d) {
   const ref = REF_OUTILS[ex.kind === 'planche' ? 'planche' : 'cablage'];
-  const choisis = Object.keys(d.outils || {}).filter(k => d.outils[k]);
+  const connus = new Set(OUTILLAGE.flatMap(g => g.items.map(i => i[0])));
+  const choisis = Object.keys(d.outils || {}).filter(k => d.outils[k] && connus.has(k)); // un outil retiré de la liste (coffre, cadenas) ne compte plus
   const nom = id => { for (const g of OUTILLAGE) for (const [i, n] of g.items) if (i === id) return n; return id; };
   const manque = ref.filter(id => !choisis.includes(id) && !(id === 'tv-4' && choisis.includes('tv-3')));
   if (!choisis.length) return [{ g: 'erreur', msg: 'Aucun outil n\'est coché.', fiche: 'outils-coffre' }];

@@ -1156,7 +1156,8 @@ function htmlParties(parties, ouvert, accepter) {
 }
 function totalGrille(g) {
   const vide = k => g[k] == null || g[k] === '';
-  return { tot: GRILLE.reduce((s, [k]) => s + (vide(k) ? 0 : +g[k]), 0), max: GRILLE.reduce((s, [k, , m]) => s + (vide(k) ? 0 : m), 0) };
+  const val = k => { const x = parseFloat(String(g[k]).replace(',', '.')); return isNaN(x) ? 0 : x; }; // « 12,5 » des anciennes corrections
+  return { tot: GRILLE.reduce((s, [k]) => s + (vide(k) ? 0 : val(k)), 0), max: GRILLE.reduce((s, [k, , m]) => s + (vide(k) ? 0 : m), 0) };
 }
 function htmlGrille(g, editable) {
   const { tot, max } = totalGrille(g);

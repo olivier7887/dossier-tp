@@ -265,6 +265,7 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 .c-acc input { margin: 0; accent-color: var(--ok); }
 .notice.rendu { border-left: 4px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
 .notice.rendu p { margin: 0; } .notice.rendu .msg { margin-top: 6px; white-space: pre-wrap; padding: 8px 10px; background: var(--surface); border-radius: 6px; }
+.ex-msg { display: block; margin-top: 4px; font-size: .85rem; color: var(--warn); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msg-rendu { border-left: 4px solid var(--warn); } .msg-rendu p { white-space: pre-wrap; }
 .suivi-l { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .suivi-l li { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
@@ -600,12 +601,12 @@ dialog:has(.annot-dlg) { width: min(1000px, calc(100vw - 24px)); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=23"></script>
-<script src="editors.js?v=23"></script>
-<script src="correction.js?v=23"></script>
-<script src="pratique.js?v=23"></script>
-<script src="createur.js?v=23"></script>
-<script src="app.js?v=23"></script>
+<script src="data.js?v=24"></script>
+<script src="editors.js?v=24"></script>
+<script src="correction.js?v=24"></script>
+<script src="pratique.js?v=24"></script>
+<script src="createur.js?v=24"></script>
+<script src="app.js?v=24"></script>
 
 </body>
 </html>

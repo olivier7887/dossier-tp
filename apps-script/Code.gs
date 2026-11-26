@@ -251,7 +251,14 @@ function moi_(u) {
     res.profil = { prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), confirme: r[4] === true };
     res.planche = { validee: r[5] === true, lignes: json_(r[6], []) };
     res.resume = {};
-    lignes_('dossiers').forEach(d => { if (String(d[0]).toLowerCase() === u.email) res.resume[d[1]] = { maj: d[3] ? new Date(d[3]).getTime() : 0, remis: d[4] === true, corrige: d[9] === true, remises: Number(d[10]) || 0 }; });
+    lignes_('dossiers').forEach(d => {
+      if (String(d[0]).toLowerCase() !== u.email) return;
+      const e = { maj: d[3] ? new Date(d[3]).getTime() : 0, remis: d[4] === true, corrige: d[9] === true, remises: Number(d[10]) || 0 };
+      // dossier rendu par le professeur (et pas encore remis) : l'accueil de l'élève l'affiche avec le message
+      const h = d[4] === true ? null : (json_(d[11], []) || []).slice(-1)[0];
+      if (h && h.rendu) e.rendu = { le: h.le || 0, message: h.message || '' };
+      res.resume[d[1]] = e;
+    });
     return res;
   });
 }
@@ -572,7 +579,7 @@ function profRendre_(email, ex, message, par) {
       if (corr) sh.getRange(i + 2, 9, 1, 2).setValues([['', false]]);
     }
     sh.getRange(i + 2, 5).setValue(false);
-    return true;
+    return { rendu: true, message: !!message }; // l'app vérifie ainsi que le message a bien été enregistré
   });
 }
 

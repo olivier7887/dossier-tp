@@ -329,8 +329,18 @@ function deconnecter(msg) {
 }
 
 /* ---------- accueil élève ---------- */
+// dossier rendu par le professeur et pas encore remis à nouveau (d'après le serveur, lu à l'ouverture de l'app)
+function renduEx(ex) {
+  const d = DATA.ex[ex.id], r = (DATA.resume || {})[ex.id];
+  if (!r || r.remis) return null;
+  if (d && d.remis && (d.maj || 0) > ((r.rendu && r.rendu.le) || 0)) return null; // remis entre-temps depuis cet appareil
+  if (r.rendu) return r.rendu;
+  const h = d && !d.remis && (d.historique || []).slice(-1)[0];
+  return h && h.rendu ? { le: h.le, message: h.message || '' } : null;
+}
 function etatEx(ex) {
   const d = DATA.ex[ex.id], r = (DATA.resume || {})[ex.id];
+  if (renduEx(ex)) return { lbl: 'À corriger', cls: 'todo' };
   if ((d && d.correction) || (r && r.corrige && (!d || d.remis !== false))) return { lbl: 'Corrigé', cls: 'ok' };
   if ((d && d.remis) || (!d && r && r.remis)) return { lbl: 'Remis', cls: 'ok' };
   if (!d && r) return { lbl: 'En cours', cls: 'cur' };
@@ -346,12 +356,13 @@ function homeEleve(main) {
     </section>
     <p class="ma-classe muted">Classe : <b>${esc(DATA.profil.classe || '—')}</b>${DATA.profil.prof ? ` · Professeur : <b>${esc(nomProf(DATA.profil.prof))}</b>` : ''} · <button type="button" class="as-link" id="chg-classe">Modifier</button></p>
     ${DATA.msgAnnee ? `<p class="notice">Nouvelle année scolaire ${esc(DATA.annee || '')} : vos dossiers de l'an dernier ont été archivés par le professeur. Vous repartez d'une page blanche.</p>` : ''}
+    ${(() => { const l = EXERCICES.filter(renduEx); return l.length ? `<div class="notice rendu"><p><b>Votre professeur vous a rendu ${l.length > 1 ? `${l.length} dossiers` : 'un dossier'} à corriger :</b> ${l.map(x => `TP ${esc(x.num)}`).join(', ')}. Ouvrez-${l.length > 1 ? 'les' : 'le'} pour lire son message, corrigez, puis remettez.</p></div>` : ''; })()}
     ${planche ? '' : `<p class="notice">Commencez par le <b>TP 0</b> : la liste du matériel de la planche, une fois validée par le professeur, sera reprise d'office dans les bons de commande suivants.</p>`}
     <ol class="ex-list">${EXERCICES.map(ex => {
-      const e = etatEx(ex);
+      const e = etatEx(ex), rd = renduEx(ex);
       return `<li><button type="button" class="ex-card" data-ex="${ex.id}">
         <span class="ex-num">TP ${ex.num}</span>
-        <span class="ex-main"><span class="ex-title">${esc(ex.titre)}</span><span class="ex-sub">${esc(ex.court)}</span></span>
+        <span class="ex-main"><span class="ex-title">${esc(ex.titre)}</span><span class="ex-sub">${esc(ex.court)}</span>${rd && rd.message ? `<span class="ex-msg">Message du professeur : ${esc(rd.message)}</span>` : ''}</span>
         <span class="state ${e.cls}">${e.lbl}</span></button></li>`;
     }).join('')}</ol>`;
   main.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => go({ page: 'ex', id: b.dataset.ex, tab: 'enonce' })));
@@ -1115,7 +1126,19 @@ function ouvrirRendre(ex, apres) {
   $('#rd', dlg).addEventListener('submit', async e => {
     e.preventDefault();
     const btn = dlg.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Envoi…';
-    try { await api('profRendre', { email: CTX.eleve, ex: ex.id, message: $('#rd-msg', dlg).value.trim() }); dlg.close(); PV = null; ELEVES = null; apres(); }
+    const msg = $('#rd-msg', dlg).value.trim();
+    try {
+      const r = await api('profRendre', { email: CTX.eleve, ex: ex.id, message: msg });
+      PV = null; ELEVES = null;
+      if (msg && !(r && r.message)) {
+        // ancien script dans le Google Sheet : le dossier est rendu, mais le message n'a pas été gardé
+        $('#rd', dlg).innerHTML = `<p class="err"><b>Le dossier est rendu, mais votre message n'a pas été enregistré.</b> Le script du Google Sheet n'est pas à jour : recollez le dernier Code.gs dans Apps Script, puis Déployer → Gérer les déploiements → Nouvelle version (pour les deux déploiements).</p>
+          <p class="muted small">Votre message, à recopier ensuite :</p><textarea rows="4" readonly>${esc(msg)}</textarea><div class="row wrapr"><button type="button" class="btn primary" data-close>Fermer</button></div>`;
+        dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => { dlg.close(); apres(); }));
+        return;
+      }
+      dlg.close(); apres();
+    }
     catch (err) { btn.disabled = false; btn.textContent = 'Rendre le dossier'; $('#rd-err', dlg).textContent = err.message; }
   });
   dlg.showModal(); setTimeout(() => { const t = $('#rd-msg', dlg); if (t) t.focus(); }, 50);

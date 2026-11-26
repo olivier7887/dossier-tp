@@ -265,6 +265,11 @@ dialog::backdrop { background: rgba(15, 20, 28, .45); }
 .c-acc input { margin: 0; accent-color: var(--ok); }
 .notice.rendu { border-left: 4px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
 .notice.rendu p { margin: 0; } .notice.rendu .msg { margin-top: 6px; white-space: pre-wrap; padding: 8px 10px; background: var(--surface); border-radius: 6px; }
+.cell-btn.note { font: 600 .8rem var(--font-mono); white-space: nowrap; }
+.cell-btn .sur { font-weight: 400; opacity: .7; font-size: .72rem; }
+.cell-btn.hors { opacity: .4; }
+.tbl.eleves .moy { background: var(--surface-2); border-left: 1px solid var(--line); white-space: nowrap; }
+.tbl.eleves tfoot td { border-top: 2px solid var(--line); background: var(--surface-2); font-size: .85rem; }
 .ex-msg { display: block; margin-top: 4px; font-size: .85rem; color: var(--warn); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .msg-rendu { border-left: 4px solid var(--warn); } .msg-rendu p { white-space: pre-wrap; }
 .suivi-l { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
@@ -601,12 +606,12 @@ dialog:has(.annot-dlg) { width: min(1000px, calc(100vw - 24px)); }
 <div id="app"></div>
 <dialog id="dlg" aria-label="Fenêtre"></dialog>
 <script src="config.js"></script>
-<script src="data.js?v=24"></script>
-<script src="editors.js?v=24"></script>
-<script src="correction.js?v=24"></script>
-<script src="pratique.js?v=24"></script>
-<script src="createur.js?v=24"></script>
-<script src="app.js?v=24"></script>
+<script src="data.js?v=25"></script>
+<script src="editors.js?v=25"></script>
+<script src="correction.js?v=25"></script>
+<script src="pratique.js?v=25"></script>
+<script src="createur.js?v=25"></script>
+<script src="app.js?v=25"></script>
 
 </body>
 </html>

@@ -1319,6 +1319,47 @@ function apprendreView(main) {
 
 /* ---------- accueil professeur ---------- */
 let ELEVES = null, FILTRE_ELEVES = '', FILTRE_CLASSE = '';
+/* ---------- notes et périodes ----------
+   Une période va de la clôture précédente (ou du début de l'année) à sa clôture ; la période en cours n'a pas de fin.
+   Un TP compte dans la période où l'élève l'a remis (chacun avance à son rythme). */
+let PERIODE_SEL = null; // null = période en cours, sinon index dans DATA.periodes
+let MODE_NOTE = store.get('tp3pelec:mode-note', 'pct');
+const dateJour = t => new Date(t).toLocaleDateString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+function bornesPeriode(i) {
+  const P = DATA.periodes || [], k = i == null ? P.length : i;
+  return { debut: k > 0 ? P[k - 1].fin : 0, fin: k < P.length ? P[k].fin : Infinity, nom: k < P.length ? P[k].nom : 'Période en cours' };
+}
+const noteDe = st => { if (!st || !st.corrige || !st.remis || !st.grille) return null; const t = totalGrille(st.grille); return t.max ? { tot: t.tot, max: t.max, pct: t.tot / t.max * 100 } : null; };
+const dansPeriode = (st, b) => !!st && (st.remisLe ? st.remisLe > b.debut && st.remisLe <= b.fin : b.fin === Infinity);
+function moyenneEleve(e, b) {
+  let tot = 0, max = 0, n = 0;
+  EXERCICES.forEach(x => { const st = e.ex[x.id], nt = noteDe(st); if (nt && dansPeriode(st, b)) { tot += nt.tot; max += nt.max; n++; } });
+  return n ? { pct: tot / max * 100, tot, max, n } : null;
+}
+const fmtPct = p => `${num(Math.round(p * 10) / 10)} %`;
+function openCloture(apres) {
+  const dlg = $('#dlg'), P = DATA.periodes || [], b = bornesPeriode(null);
+  dlg.innerHTML = `<div class="dlg-in dlg-petit"><div class="dlg-head"><div><span class="eyebrow">Notes</span><h2>Clôturer la période</h2></div><button type="button" class="ibtn" data-close aria-label="Fermer">✕</button></div>
+    <form id="cl" class="form-grid">
+      <p>La période en cours${b.debut ? ` (commencée le ${dateJour(b.debut)})` : ''} se termine maintenant, et la suivante commence aujourd'hui.</p>
+      <ul class="small"><li>Chaque TP compte dans la période où l'élève l'a <b>remis</b> : chacun avance à son rythme.</li>
+        <li>Les moyennes de la période clôturée restent consultables : choisissez-la dans la liste « Période ».</li>
+        <li>Les élèves ne voient pas de changement. La clôture ne concerne que vos tableaux.</li></ul>
+      <label>Nom de la période qui se termine <input id="cl-nom" maxlength="40" value="${esc('Période ' + (P.length + 1))}"></label>
+      <p id="cl-err" class="err" role="status"></p>
+      <div class="row wrapr"><button type="submit" class="btn primary">Clôturer maintenant</button><button type="button" class="btn ghost" data-close>Annuler</button></div>
+      ${P.length ? `<p class="muted small">Erreur de clic ? <button type="button" class="as-link" id="cl-annul">Annuler la dernière clôture (${esc(P[P.length - 1].nom)}, ${dateJour(P[P.length - 1].fin)})</button></p>` : ''}
+    </form></div>`;
+  dlg.querySelectorAll('[data-close]').forEach(x => x.addEventListener('click', () => dlg.close()));
+  const fini = per => { DATA.periodes = per; persist(); PERIODE_SEL = null; dlg.close(); apres(); };
+  $('#cl', dlg).addEventListener('submit', async ev => {
+    ev.preventDefault(); const btn = dlg.querySelector('[type=submit]'); btn.disabled = true;
+    try { fini(await api('profCloturer', { nom: $('#cl-nom', dlg).value.trim() })); } catch (e) { btn.disabled = false; $('#cl-err', dlg).textContent = e.message; }
+  });
+  const an = $('#cl-annul', dlg);
+  if (an) an.addEventListener('click', async () => { an.disabled = true; try { fini(await api('profAnnulerCloture', {})); } catch (e) { an.disabled = false; $('#cl-err', dlg).textContent = e.message; } });
+  dlg.showModal();
+}
 let VUE_ELEVES = store.get('tp3pelec:vue-eleves', null);
 const profEleve = e => e.prof || profDeClasse(e.classe);
 // un élève est « à moi » s'il m'a choisi, ou si je suis l'un des (au plus 2) professeurs de sa classe
@@ -1337,6 +1378,11 @@ function profHome(main) {
       <label class="inline">Classe <select id="el-classe"></select></label>
       <label class="inline">Rechercher <input id="el-q" type="search" value="${esc(FILTRE_ELEVES)}" placeholder="Nom, adresse…"></label>
       <button type="button" class="btn ghost small" id="el-maj">Actualiser</button>
+    </div>
+    <div class="el-bar">
+      <label class="inline">Période <select id="el-per"></select></label>
+      <div class="chips" role="group" aria-label="Affichage des notes"><button type="button" class="chip" data-note="pct">%</button><button type="button" class="chip" data-note="pts">Points</button></div>
+      <button type="button" class="btn small" id="el-clot">Clôturer la période…</button>
     </div>
     <p class="muted small" id="el-compte"></p>
     <div id="eleves" class="table-wrap"><p class="empty">Chargement de la liste…</p></div>` : ''}
@@ -1367,9 +1413,16 @@ function profHome(main) {
     if (FILTRE_CLASSE && !cls.includes(FILTRE_CLASSE)) FILTRE_CLASSE = '';
     $('#el-classe').innerHTML = `<option value="">Toutes</option>${cls.map(c => `<option ${c === FILTRE_CLASSE ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
   };
+  const majPeriodes = () => {
+    const P = DATA.periodes || [], sel = $('#el-per'); if (!sel) return;
+    if (PERIODE_SEL != null && PERIODE_SEL >= P.length) PERIODE_SEL = null;
+    const cur = bornesPeriode(null);
+    sel.innerHTML = `<option value="">En cours${cur.debut ? ` (depuis le ${dateJour(cur.debut)})` : ''}</option>${P.map((x, i) => { const b = bornesPeriode(i); return `<option value="${i}" ${PERIODE_SEL === i ? 'selected' : ''}>${esc(x.nom)} (${b.debut ? dateJour(b.debut) + ' → ' : 'jusqu\'au '}${dateJour(b.fin)})</option>`; }).reverse().join('')}`;
+    main.querySelectorAll('[data-note]').forEach(x => { x.classList.toggle('on', x.dataset.note === MODE_NOTE); x.setAttribute('aria-pressed', x.dataset.note === MODE_NOTE); });
+  };
   const draw = () => {
     const box = $('#eleves'); if (!box) return;
-    majFiltres();
+    majFiltres(); majPeriodes();
     if (!ELEVES) return;
     const q = FILTRE_ELEVES.trim().toLowerCase(), vue = vueEleves();
     const list = ELEVES.filter(e => (vue === 'tous' || estMonEleve(e)) && (!FILTRE_CLASSE || e.classe === FILTRE_CLASSE) && (!q || `${e.nom} ${e.prenom} ${e.classe} ${e.email}`.toLowerCase().includes(q)));
@@ -1379,12 +1432,21 @@ function profHome(main) {
       box.querySelectorAll('[data-vue]').forEach(b => b.addEventListener('click', () => choisirVue(b.dataset.vue)));
       return;
     }
-    box.innerHTML = `<table class="tbl eleves"><thead><tr><th>Élève</th><th>Classe</th><th class="c">Planche</th>${EXERCICES.map(x => `<th class="c">TP ${x.num}</th>`).join('')}</tr></thead>
+    const bp = bornesPeriode(PERIODE_SEL);
+    const cellNote = nt => MODE_NOTE === 'pts' ? `${num(nt.tot)}<span class="sur">/${nt.max}</span>` : fmtPct(nt.pct);
+    const moys = list.map(e => moyenneEleve(e, bp));
+    const parTP = EXERCICES.map(x => { const l = list.map(e => e.ex[x.id]).filter(st => noteDe(st) && dansPeriode(st, bp)).map(st => noteDe(st).pct); return l.length ? l.reduce((a, b) => a + b, 0) / l.length : null; });
+    const mm = moys.filter(Boolean), moyGen = mm.length ? mm.reduce((a, m) => a + m.pct, 0) / mm.length : null;
+    box.innerHTML = `<table class="tbl eleves"><thead><tr><th>Élève</th><th>Classe</th><th class="c">Planche</th>${EXERCICES.map(x => `<th class="c">TP ${x.num}</th>`).join('')}<th class="c moy" title="${esc(bp.nom)} : points obtenus sur le total des TP corrigés remis pendant la période">Moyenne</th></tr></thead>
       <tbody>${list.map(e => `<tr><td><b>${esc(e.nom)}</b> ${esc(e.prenom)}<span class="muted small mail">${esc(e.email)}</span></td>
         <td><span class="cl-cell"><span>${esc(e.classe || '—')}<span class="muted small mail">${esc(nomsProfsEleve(e) || 'sans professeur')}</span></span><button type="button" class="ibtn small-i" data-aff="${esc(e.email)}" title="Changer la classe ou le professeur" aria-label="Changer la classe ou le professeur de ${esc(e.prenom)} ${esc(e.nom)}">✎</button></span></td>
         <td class="c">${e.planche ? '<span class="state ok">validée</span>' : '<span class="muted">—</span>'}</td>
-        ${EXERCICES.map(x => { const st = e.ex[x.id]; const lbl = st ? (st.corrige && st.remis ? 'corrigé' : st.remis ? 'à corriger' : 'en cours') : '—'; const cls = st ? (st.corrige && st.remis ? 'ok' : st.remis ? 'todo' : 'cur') : '';
-          return `<td class="c"><button type="button" class="cell-btn state ${cls}" data-el="${esc(e.email)}" data-x="${x.id}" data-remis="${st && st.remis ? 1 : 0}" title="TP ${x.num} – ${esc(e.prenom)} ${esc(e.nom)}">${lbl}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
+        ${EXERCICES.map(x => { const st = e.ex[x.id], nt = noteDe(st), hors = st && st.remisLe && !dansPeriode(st, bp);
+          const lbl = st ? (nt ? cellNote(nt) : st.corrige && st.remis ? 'corrigé' : st.remis ? 'à corriger' : st.remises ? 'rendu' : 'en cours') : '—'; const cls = st ? (st.corrige && st.remis ? 'ok' : st.remis ? 'todo' : 'cur') : '';
+          const tip = `TP ${x.num} – ${e.prenom} ${e.nom}${nt ? ` · ${num(nt.tot)} / ${nt.max} points (${fmtPct(nt.pct)})` : ''}${st && st.remisLe ? ` · remis le ${dateJour(st.remisLe)}${hors ? ', hors de la période affichée' : ''}` : ''}`;
+          return `<td class="c"><button type="button" class="cell-btn state ${cls}${nt ? ' note' : ''}${hors ? ' hors' : ''}" data-el="${esc(e.email)}" data-x="${x.id}" data-remis="${st && st.remis ? 1 : 0}" title="${esc(tip)}">${lbl}</button></td>`; }).join('')}
+        <td class="c moy">${moys[list.indexOf(e)] ? `<b>${fmtPct(moys[list.indexOf(e)].pct)}</b><span class="muted small mail">${moys[list.indexOf(e)].n} TP</span>` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="3"><b>Moyenne</b> <span class="muted small">${esc(bp.nom)} · élèves affichés</span></td>${parTP.map(m => `<td class="c">${m == null ? '<span class="muted">—</span>' : fmtPct(m)}</td>`).join('')}<td class="c moy">${moyGen == null ? '—' : `<b>${fmtPct(moyGen)}</b>`}</td></tr></tfoot></table>`;
     box.querySelectorAll('[data-el]').forEach(b => b.addEventListener('click', () => { PV = null; go({ page: 'ex', id: b.dataset.x, tab: b.dataset.remis === '1' ? 'correction' : 'enonce', eleve: b.dataset.el }); }));
     box.querySelectorAll('[data-aff]').forEach(b => b.addEventListener('click', () => openAffecter(ELEVES.find(e => e.email === b.dataset.aff), draw)));
   };
@@ -1393,8 +1455,11 @@ function profHome(main) {
   main.querySelectorAll('.el-bar [data-vue]').forEach(b => b.addEventListener('click', () => choisirVue(b.dataset.vue)));
   $('#el-classe').addEventListener('change', e => { FILTRE_CLASSE = e.target.value; draw(); });
   $('#el-q').addEventListener('input', e => { FILTRE_ELEVES = e.target.value; draw(); });
+  $('#el-per').addEventListener('change', e => { PERIODE_SEL = e.target.value === '' ? null : +e.target.value; draw(); });
+  main.querySelectorAll('[data-note]').forEach(b => b.addEventListener('click', () => { MODE_NOTE = b.dataset.note; store.set('tp3pelec:mode-note', MODE_NOTE); draw(); }));
+  $('#el-clot').addEventListener('click', () => openCloture(draw));
   $('#el-maj').addEventListener('click', () => { ELEVES = null; $('#eleves').innerHTML = '<p class="empty">Chargement de la liste…</p>'; charger(); });
-  if (ELEVES) draw(); else majFiltres();
+  if (ELEVES) draw(); else { majFiltres(); majPeriodes(); }
   charger(); // toujours rafraîchie en arrière-plan : nouvelles remises, nouveaux élèves
 }
 function openAffecter(e, redraw) {
@@ -1480,6 +1545,7 @@ async function rafraichir() {
       DATA.annee = r.annee;
     }
     DATA.admin = !!r.admin;
+    if (r.role === 'prof') DATA.periodes = Array.isArray(r.periodes) ? r.periodes : (DATA.periodes || []);
     if (r.role === 'eleve') {
       const garde = DATA.profilDirty ? DATA.profil : null;
       DATA.profil = garde || r.profil;

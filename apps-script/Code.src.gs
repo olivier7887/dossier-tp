@@ -28,6 +28,7 @@ const ONGLETS = {
   eleves: { nom: 'Élèves', entetes: ['Adresse', 'Prénom', 'Nom', 'Classe', 'Profil confirmé', 'Planche validée', 'Planche (données)', 'Validée par', 'Validée le', 'Première connexion', 'Dernière connexion', 'Professeur'] },
   dossiers: { nom: 'Dossiers', entetes: ['Adresse', 'Exercice', 'Données', 'Mis à jour', 'Remis', 'Remis le', 'Photo (id Drive)', 'Photo (lien)', 'Correction', 'Correction publiée', 'Remises', 'Historique', 'Schémas à la main', 'Essai (prof)'] },
   exercices: { nom: 'Exercices', entetes: ['id', 'N°', 'Titre', 'Définition (JSON)', 'Auteur', 'Modifié le', 'Visible'] },
+  periodes: { nom: 'Périodes', entetes: ['Professeur (adresse)', 'Période', 'Clôturée le'] },
   catalogue: { nom: 'Catalogue', entetes: ['id', 'Catégorie', 'Description', 'Référence', 'Marque', 'Unité', 'Prix HTVA', 'Couleur', 'Visible', 'À vérifier'] },
 };
 
@@ -161,6 +162,8 @@ const ACTIONS = {
   exSauver: (u, q) => (prof_(u), exSauver_(u, q.exercice || {})),
   exVisible: (u, q) => (prof_(u), exVisible_(String(q.id), !!q.visible)),
   profAffecter: (u, q) => (prof_(u), profAffecter_(String(q.email).toLowerCase(), String(q.classe || ''), String(q.prof || '').toLowerCase())),
+  profCloturer: (u, q) => (prof_(u), cloturer_(u.email, String(q.nom || '').trim().slice(0, 40))),
+  profAnnulerCloture: (u) => (prof_(u), annulerCloture_(u.email)),
   profNouvelleAnnee: (u, q) => (admin_(u), nouvelleAnnee_(String(q.confirmation || ''))),
 };
 // actions refusées si l'app de l'élève date d'une année scolaire archivée
@@ -203,7 +206,16 @@ function sso_(ticket) {
 /* =========================================================
    Outils
    ========================================================= */
-function onglet_(k) { return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ONGLETS[k].nom); }
+function onglet_(k) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(ONGLETS[k].nom);
+  if (!sh) { // onglet ajouté par une mise à jour : créé à la première utilisation (sans relancer « installer »)
+    sh = ss.insertSheet(ONGLETS[k].nom);
+    sh.getRange(1, 1, 1, ONGLETS[k].entetes.length).setValues([ONGLETS[k].entetes]).setFontWeight('bold').setBackground('#e9edf1');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
 function lignes_(k) {
   const sh = onglet_(k), n = sh.getLastRow();
   return n < 2 ? [] : sh.getRange(2, 1, n - 1, ONGLETS[k].entetes.length).getValues();
@@ -238,7 +250,7 @@ function listeClasses_() { return lignes_('classes').filter(r => String(r[0]).tr
    ========================================================= */
 function moi_(u) {
   const res = { email: u.email, role: u.role, catalogue: lireCatalogue_(u.role), annee: annee_(), classes: listeClasses_(), profs: listeProfs_(), exercices: listeExercices_(u.role) };
-  if (u.role === 'prof') { const n = nomDepuisEmail_(u.email); res.profil = { prenom: n.prenom, nom: n.nom, classe: '', confirme: true }; res.admin = estAdmin_(u.email); return res; }
+  if (u.role === 'prof') { const n = nomDepuisEmail_(u.email); res.profil = { prenom: n.prenom, nom: n.nom, classe: '', confirme: true }; res.admin = estAdmin_(u.email); res.periodes = periodes_(u.email); return res; }
   // (les élèves reçoivent aussi l'état de correction de chaque TP)
   return verrou_(() => {
     const sh = onglet_('eleves'), rows = lignes_('eleves'), now = new Date();
@@ -438,7 +450,12 @@ function profEleves_() {
   const dossiers = lignes_('dossiers');
   return lignes_('eleves').map(r => {
     const email = String(r[0]).toLowerCase(), ex = {};
-    dossiers.forEach(d => { if (String(d[0]).toLowerCase() === email) ex[d[1]] = { essai: (json_(d[13], {}) || {}).premier || '', remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 }; });
+    dossiers.forEach(d => {
+      if (String(d[0]).toLowerCase() !== email) return;
+      const e = { essai: (json_(d[13], {}) || {}).premier || '', remis: d[4] === true, maj: d[3] ? new Date(d[3]).getTime() : 0, remisLe: d[5] ? new Date(d[5]).getTime() : 0, photo: !!d[6], corrige: d[9] === true, brouillon: !!d[8] && d[9] !== true, remises: Number(d[10]) || 0 };
+      if (e.corrige) { const c = json_(d[8], null); if (c && c.grille) e.grille = c.grille; } // points de la correction publiée
+      ex[d[1]] = e;
+    });
     return { email, prenom: r[1], nom: r[2], classe: r[3], prof: String(r[11] || '').toLowerCase(), planche: r[5] === true, derniere: r[10] ? new Date(r[10]).getTime() : 0, ex };
   }).sort((a, b) => (String(a.classe) + ' ' + a.nom + ' ' + a.prenom).localeCompare(String(b.classe) + ' ' + b.nom + ' ' + b.prenom));
 }
@@ -458,6 +475,28 @@ function profDossier_(email, ex) {
     profil: el ? { prenom: el[1], nom: el[2], classe: el[3] } : null,
     planche: el ? { validee: el[5] === true, lignes: json_(el[6], []) } : { validee: false, lignes: [] },
   };
+}
+/* ---------- périodes : chaque professeur clôture les siennes ; une période va de la clôture précédente à la sienne ---------- */
+function periodes_(email) {
+  return lignes_('periodes').filter(r => String(r[0]).trim().toLowerCase() === email && r[2])
+    .map(r => ({ nom: String(r[1] || ''), fin: new Date(r[2]).getTime() })).sort((a, b) => a.fin - b.fin);
+}
+function cloturer_(email, nom) {
+  return verrou_(() => {
+    const n = periodes_(email).length;
+    onglet_('periodes').appendRow([email, nom || 'Période ' + (n + 1), new Date()]);
+    return periodes_(email);
+  });
+}
+function annulerCloture_(email) {
+  return verrou_(() => {
+    const sh = onglet_('periodes'), rows = lignes_('periodes');
+    let k = -1, t = -1;
+    rows.forEach((r, i) => { if (String(r[0]).trim().toLowerCase() === email && r[2] && new Date(r[2]).getTime() >= t) { t = new Date(r[2]).getTime(); k = i; } });
+    if (k < 0) throw new Error('Aucune période clôturée.');
+    sh.deleteRow(k + 2);
+    return periodes_(email);
+  });
 }
 function profPhoto_(id) {
   const b = DriveApp.getFileById(id).getBlob();
@@ -533,7 +572,7 @@ function nouvelleAnnee_(confirmation) {
     try { const ph = dossierPhotos_(); ph.setName('Photos des élèves ' + annee); ph.moveTo(dossier); } catch (e) { /* dossier photos introuvable */ }
     props.setProperty('DOSSIER_PHOTOS', DriveApp.createFolder('Dossier TP – photos des élèves').getId());
     // 2. remise à zéro (Profs, Classes, Exercices et Catalogue sont gardés)
-    ['eleves', 'dossiers', 'bloques'].forEach(k => {
+    ['eleves', 'dossiers', 'bloques', 'periodes'].forEach(k => {
       const sh = onglet_(k), n = sh.getLastRow();
       if (n >= 2) sh.getRange(2, 1, n - 1, sh.getMaxColumns()).clearContent();
     });
